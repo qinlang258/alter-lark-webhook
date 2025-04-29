@@ -22,6 +22,7 @@ var (
 					controller.Prometheus,
 				)
 			})
+			s.SetPort(8000)
 			s.Run()
 			return nil
 		},
