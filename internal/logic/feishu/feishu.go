@@ -67,18 +67,12 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	otherlabelsStr = extractOtherLabels(templateVariable)
 
 	// 根据 severity 来构建消息
-	textMessage := buildTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
+	//textMessage := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
 
-	// 构建消息体，发送给飞书机器人
-	payload := map[string]interface{}{
-		"msg_type": "text",
-		"content": map[string]interface{}{
-			"text": textMessage,
-		},
-	}
+	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
 
-	// 如果严重性为 "critical"，发送普通消息
-	if severity == "critical" || severity == "warning" {
+	// 修改调用条件，增加resolved状态判断
+	if severity == "critical" || severity == "warning" || severity == "resolved" {
 		return s.sendToFeishu(ctx, payload, alertname, severity, env, startsAt, otherlabels, in.Hook)
 	}
 	return nil
@@ -109,24 +103,85 @@ func extractOtherLabels(templateVariable map[string]interface{}) string {
 	return otherlabelsStr
 }
 
-// 构建文本消息
-func buildTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr string) string {
-	return fmt.Sprintf(
-		"告警名称: %s\n"+
-			"严重程度: %s\n"+
-			"描述: \n\t%s\n"+
-			"环境: %s\n"+
-			"开始时间: %s\n"+
-			"告警链接: %s\n"+
-			"其它标签: \n%s",
-		alertname,
-		severity,
-		description,
-		env,
-		startsAt,
-		generatorURL,
-		otherlabelsStr,
-	)
+func buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr string) map[string]interface{} {
+	color := "green" // 默认设为绿色
+	status := "告警通知"
+
+	// 判断是否为恢复状态
+	if severity == "resolved" {
+		status = "告警恢复"
+	} else {
+		// 非恢复状态才按严重程度设置颜色
+		if severity == "critical" {
+			color = "red"
+		} else if severity == "warning" {
+			color = "orange"
+		}
+	}
+
+	return map[string]interface{}{
+		"msg_type": "interactive",
+		"card": map[string]interface{}{
+			"header": map[string]interface{}{
+				"title": map[string]interface{}{
+					"tag":     "plain_text",
+					"content": fmt.Sprintf("【%s】%s", severity, status),
+				},
+				"template": color,
+			},
+			"elements": []map[string]interface{}{
+				{
+					"tag": "div",
+					"fields": []map[string]interface{}{
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**告警名称**:\n%s", alertname),
+							},
+						},
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**严重程度**:\n<font color=\"%s\">%s</font>", color, severity),
+							},
+						},
+					},
+				},
+				{
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**描述**:\n%s", description),
+				},
+				{
+					"tag": "hr",
+				},
+				{
+					"tag": "note",
+					"elements": []map[string]interface{}{
+						{
+							"tag":     "plain_text",
+							"content": fmt.Sprintf("环境: %s | 开始时间: %s", env, startsAt),
+						},
+					},
+				},
+				{
+					"tag": "action",
+					"actions": []map[string]interface{}{
+						{
+							"tag": "button",
+							"text": map[string]interface{}{
+								"tag":     "plain_text",
+								"content": "查看详情",
+							},
+							"url":  generatorURL,
+							"type": "primary",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // 发送消息到飞书
