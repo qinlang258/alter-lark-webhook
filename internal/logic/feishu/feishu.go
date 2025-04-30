@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"net/http"
 
@@ -40,9 +41,11 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	}
 
 	// 安全地访问嵌套字段 alertData
-	var alertname, severity, description, env, startsAt, generatorURL string
+	var alertname, severity, description, env, startsAt, generatorURL, status, summary string
 	var otherlabels map[string]interface{}
 	var otherlabelsStr string
+
+	fmt.Println("alertData:           ", alertData)
 
 	// 提取 template_variable 字段，进行格式检查
 	data, ok := alertData["data"].(map[string]interface{})
@@ -62,6 +65,8 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	env = extractField(templateVariable, "env")
 	startsAt = extractField(templateVariable, "startsAt")
 	generatorURL = extractField(templateVariable, "generatorURL")
+	status = extractField(templateVariable, "status")
+	summary = extractField(templateVariable, "summary")
 
 	// 提取其它标签
 	otherlabelsStr = extractOtherLabels(templateVariable)
@@ -69,7 +74,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	// 根据 severity 来构建消息
 	//textMessage := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
 
-	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
+	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary)
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" {
@@ -88,44 +93,57 @@ func extractField(data map[string]interface{}, key string) string {
 
 // 提取其他标签并格式化
 func extractOtherLabels(templateVariable map[string]interface{}) string {
-	var otherlabels map[string]interface{}
-	var otherlabelsStr string
+	var builder strings.Builder
 
 	if labels, ok := templateVariable["otherlabels"].(map[string]interface{}); ok {
-		otherlabels = labels
-		for k, v := range otherlabels {
-			otherlabelsStr += fmt.Sprintf("%s: %v\n", k, v)
+		builder.WriteString("{")
+		first := true
+		for k, v := range labels {
+			if !first {
+				builder.WriteString("\n")
+			}
+			builder.WriteString(fmt.Sprintf("%s: %v", k, v))
+			first = false
 		}
+		builder.WriteString("}")
 	} else {
-		otherlabelsStr = "{}"
+		builder.WriteString("{}")
 	}
 
-	return otherlabelsStr
+	return builder.String()
 }
 
-func buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr string) map[string]interface{} {
-	color := "green" // 默认设为绿色
-	status := "告警通知"
+func buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary string) map[string]interface{} {
+	// 初始化变量
+	var color, titlePrefix string
+	isResolved := status == "resolved"
 
-	// 判断是否为恢复状态
-	if severity == "resolved" {
+	// 设置状态和颜色
+	if isResolved {
 		status = "告警恢复"
+		color = "green"
+		titlePrefix = "✅"
 	} else {
-		// 非恢复状态才按严重程度设置颜色
-		if severity == "critical" {
+		status = "告警通知"
+		titlePrefix = "⚠️"
+		switch severity {
+		case "critical":
 			color = "red"
-		} else if severity == "warning" {
+		case "warning":
 			color = "orange"
+		default:
+			color = "blue"
 		}
 	}
 
+	// 构建消息卡片
 	return map[string]interface{}{
 		"msg_type": "interactive",
 		"card": map[string]interface{}{
 			"header": map[string]interface{}{
 				"title": map[string]interface{}{
 					"tag":     "plain_text",
-					"content": fmt.Sprintf("【%s】%s", severity, status),
+					"content": fmt.Sprintf("%s【%s】%s", titlePrefix, strings.ToUpper(severity), status),
 				},
 				"template": color,
 			},
@@ -144,7 +162,26 @@ func buildRichTextMessage(alertname, severity, description, env, startsAt, gener
 							"is_short": true,
 							"text": map[string]interface{}{
 								"tag":     "lark_md",
-								"content": fmt.Sprintf("​**严重程度**:\n<font color=\"%s\">%s</font>", color, severity),
+								"content": fmt.Sprintf("​**状态**:\n<font color=\"%s\">%s</font>", color, status),
+							},
+						},
+					},
+				},
+				{
+					"tag": "div",
+					"fields": []map[string]interface{}{
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**环境**:\n%s", env),
+							},
+						},
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**时间**:\n%s", startsAt),
 							},
 						},
 					},
@@ -154,16 +191,15 @@ func buildRichTextMessage(alertname, severity, description, env, startsAt, gener
 					"content": fmt.Sprintf("​**描述**:\n%s", description),
 				},
 				{
-					"tag": "hr",
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**summary**:\n%s", summary),
 				},
 				{
-					"tag": "note",
-					"elements": []map[string]interface{}{
-						{
-							"tag":     "plain_text",
-							"content": fmt.Sprintf("环境: %s | 开始时间: %s", env, startsAt),
-						},
-					},
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**其他标签**:\n```\n%s\n```", otherlabelsStr),
+				},
+				{
+					"tag": "hr",
 				},
 				{
 					"tag": "action",
@@ -182,6 +218,97 @@ func buildRichTextMessage(alertname, severity, description, env, startsAt, gener
 			},
 		},
 	}
+}
+
+// 标签解析示例（需根据实际数据结构实现）
+func parseLabels(labelsStr string) map[string]string {
+	// 实现具体的标签解析逻辑
+	return map[string]string{
+		"severity":   "warning",
+		"alertname":  "ai-high-cpu-used",
+		"container":  "ubuntu-container",
+		"env":        "prod",
+		"namespace":  "monitoring",
+		"pod":        "ubuntu-deployment-649b48f48c-w9h98",
+		"prometheus": "monitoring/k8s",
+	}
+}
+
+// 构建标签展示组件
+func buildLabelComponents(labelsStr string) []map[string]interface{} {
+	// 示例标签解析逻辑（需根据实际数据结构实现）
+	labels := parseLabels(labelsStr)
+
+	// 标签分类配置
+	labelGroups := map[string][]string{
+		"🖥️ 系统资源": {"pod", "namespace", "container"},
+		"🚨 告警信息":  {"severity", "alertname"},
+		"🌍 环境配置":  {"env", "cluster"},
+	}
+
+	var components []map[string]interface{}
+
+	for groupName, keys := range labelGroups {
+		var fields []map[string]interface{}
+		for _, k := range keys {
+			if v, ok := labels[k]; ok {
+				fields = append(fields, map[string]interface{}{
+					"tag": "div",
+					"text": map[string]interface{}{
+						"tag": "lark_md",
+						"content": fmt.Sprintf("`%s:` <font color='%s'>%s</font>",
+							k,
+							getLabelColor(k),
+							v),
+					},
+				})
+			}
+		}
+		if len(fields) > 0 {
+			components = append(components, map[string]interface{}{
+				"tag":              "column_set",
+				"flex_mode":        "flow",
+				"background_style": "grey",
+				"columns": []map[string]interface{}{
+					{
+						"tag":    "column",
+						"width":  "weighted",
+						"weight": 30,
+						"elements": []map[string]interface{}{
+							{
+								"tag":     "markdown",
+								"content": fmt.Sprintf("​**​%s**​", groupName),
+							},
+						},
+					},
+					{
+						"tag":      "column",
+						"width":    "weighted",
+						"weight":   70,
+						"elements": fields,
+					},
+				},
+			})
+		}
+	}
+	return components
+}
+
+// 获取标签颜色（示例实现）
+func getLabelColor(key string) string {
+	colorMap := map[string]string{
+		"critical":  "#FF4D4D",
+		"warning":   "#FF9A2E",
+		"pod":       "#3370FF",
+		"namespace": "#3370FF",
+		"container": "#3370FF",
+		"env":       "#00B567",
+		"alertname": "#FF9A2E",
+	}
+	if color, ok := colorMap[key]; ok {
+		return color
+	}
+	return "#666"
 }
 
 // 发送消息到飞书
@@ -204,6 +331,7 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		glog.Error(ctx, "请求飞书失败: %v", err)
 		return err
 	}
 	defer resp.Body.Close()

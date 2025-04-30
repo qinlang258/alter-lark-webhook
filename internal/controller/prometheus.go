@@ -8,6 +8,7 @@ import (
 	"alter-lark-webhook/internal/service"
 
 	"github.com/gogf/gf/frame/g"
+	"github.com/gogf/gf/os/glog"
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
@@ -23,7 +24,12 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		return nil, err
 	}
 
+	if err := gtime.SetTimeZone("Asia/Shanghai"); err != nil {
+		glog.Fatal(ctx, "时区设置失败:", err)
+	}
+
 	for _, alert := range alters {
+		status := alert.Get("status").String()
 		env := alert.Get("labels.env").String()
 		alertname := alert.Get("labels.alertname").String()
 		generatorURL := alert.Get("generatorURL").String()
@@ -31,7 +37,8 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		var startsAt gtime.Time
 
 		if alert.Get("startsAt") != nil {
-			startsAt = *gtime.New(alert.Get("startsAt").String()).Local()
+			// 这里的时间是UTC时间, 需要转换为本地时间
+			startsAt = *gtime.New(alert.Get("startsAt").String())
 		}
 
 		summary := alert.Get("annotations.summary").String()
@@ -57,6 +64,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 						"description":  description,
 						"otherlabels":  label,
 						"env":          env,
+						"status":       status,
 					},
 				},
 			},
