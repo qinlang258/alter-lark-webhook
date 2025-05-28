@@ -7,7 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"net/http"
 
@@ -23,6 +25,28 @@ func init() {
 
 func New() *sFeishu {
 	return &sFeishu{}
+}
+
+func (s *sFeishu) formatTimeUtc8(timeStr string) string {
+	layout := "2006-01-02 15:04:05"
+
+	// 解析为UTC时间
+	utcTime, err := time.Parse(layout, timeStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 加载东八区时区
+	cstLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		cstLoc = time.FixedZone("CST", 8*3600)
+	}
+
+	// 转换为东八区时间
+	cstTime := utcTime.In(cstLoc)
+
+	// 返回格式化后的时间字符串
+	return cstTime.Format(layout)
 }
 
 // Notify 用于向飞书发送通知消息
@@ -63,7 +87,10 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	severity = extractField(templateVariable, "severity")
 	description = extractField(templateVariable, "description")
 	env = extractField(templateVariable, "env")
+
 	startsAt = extractField(templateVariable, "startsAt")
+	startsAt = s.formatTimeUtc8(startsAt) // 格式化时间为东八区
+
 	generatorURL = extractField(templateVariable, "generatorURL")
 	status = extractField(templateVariable, "status")
 	summary = extractField(templateVariable, "summary")

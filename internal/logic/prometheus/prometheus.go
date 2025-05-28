@@ -3,6 +3,7 @@ package prometheus
 import (
 	"alter-lark-webhook/internal/service"
 	"context"
+	"fmt"
 
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/frame/g"
@@ -21,6 +22,7 @@ func New() *sPrometheus {
 func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json, err error) {
 	alerts = make([]*gjson.Json, 0)
 	bodyStr := g.RequestFromCtx(ctx).GetBodyString()
+	fmt.Println("bodyStr:        ", bodyStr)
 
 	bodyJson, err := gjson.DecodeToJson(bodyStr)
 	if err != nil {
