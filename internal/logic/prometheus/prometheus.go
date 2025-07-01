@@ -21,6 +21,14 @@ func New() *sPrometheus {
 
 func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json, err error) {
 	alerts = make([]*gjson.Json, 0)
+
+	//jsonInfo, err := g.RequestFromCtx(ctx).GetJson()
+
+	if err != nil {
+		g.Log().Errorf(ctx, "prometheus告警信息解析失败: %s", err.Error())
+		return nil, err
+	}
+
 	bodyStr := g.RequestFromCtx(ctx).GetBodyString()
 	fmt.Println("bodyStr:        ", bodyStr)
 
@@ -29,6 +37,8 @@ func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json
 		g.Log().Errorf(ctx, "prometheus告警信息解析失败: %s", err.Error())
 		return nil, err
 	}
+
+	
 
 	alertsI := bodyJson.Get("alerts").Slice()
 	if len(alertsI) == 0 {

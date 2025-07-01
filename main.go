@@ -5,6 +5,8 @@ import (
 
 	_ "alter-lark-webhook/internal/logic"
 
+	_ "github.com/gogf/gf/contrib/drivers/mysql/v2"
+
 	"github.com/gogf/gf/frame/g"
 	"github.com/gogf/gf/os/glog"
 	"github.com/gogf/gf/os/gtime"

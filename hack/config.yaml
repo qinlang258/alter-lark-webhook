@@ -2,3 +2,10 @@
 # CLI tool, only in development environment.
 # https://goframe.org/pages/viewpage.action?pageId=3673173
 gfcli:
+  gen:
+    dao:
+      #- link: "mysql:root:ql2252528@tcp(192.168.44.131:3306)/cmdb"
+      - link: "mysql:jcrose-cmdb:o*anqRCC8wid@tcp(common-test-db.ctsksym0mj1g.ap-east-1.rds.amazonaws.com:3306)/cmdb?loc=Asia%2FShanghai"
+        descriptionTag: true
+        noModelComment: false
+        jsonCase: "Camel"

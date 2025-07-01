@@ -49,6 +49,38 @@ func (s *sFeishu) formatTimeUtc8(timeStr string) string {
 	return cstTime.Format(layout)
 }
 
+func (s *sFeishu) sendAsJSON(ctx context.Context, fields map[string]string) error {
+	url := "http://jcrose-prometheus-record.jcrose-prometheus-record:8000/api/prometheus/record/save"
+	payload := map[string]interface{}{
+		"msg_type": "text",
+		"content":  fields,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to send message to Feishu: %s", resp.Status)
+	}
+
+	return nil
+}
+
 // Notify 用于向飞书发送通知消息
 func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	// 将 content 转换为 JSON 字节流
@@ -66,7 +98,6 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 
 	// 安全地访问嵌套字段 alertData
 	var alertname, severity, description, env, startsAt, generatorURL, status, summary string
-	var otherlabels map[string]interface{}
 	var otherlabelsStr string
 
 	fmt.Println("alertData:           ", alertData)
@@ -94,9 +125,48 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	generatorURL = extractField(templateVariable, "generatorURL")
 	status = extractField(templateVariable, "status")
 	summary = extractField(templateVariable, "summary")
+	otherlabelsStr = extractOtherLabels(templateVariable)
+
+	dbPayload := make(map[string]string)
+
+	if status == "resolved" {
+		dbPayload = map[string]string{
+			"alertname":   alertname,
+			"env":         env,
+			"k8s_cluster": "stx",
+			"level":       severity,
+			"start_time":  extractField(templateVariable, "startsAt"),
+			"end_time":    extractField(templateVariable, "endAt"),
+			"labels":      otherlabelsStr,
+			"summary":     summary,
+			"status":      status,
+			"description": description,
+			"generator":   generatorURL,
+			"is_resolved": "1",
+		}
+	} else {
+		dbPayload = map[string]string{
+			"alertname":   alertname,
+			"env":         env,
+			"k8s_cluster": "stx",
+			"level":       severity,
+			"start_time":  extractField(templateVariable, "startsAt"),
+			"labels":      otherlabelsStr,
+			"summary":     summary,
+			"status":      status,
+			"description": description,
+			"generator":   generatorURL,
+			"is_resolved": "0",
+		}
+	}
+
+	err = s.sendAsJSON(ctx, dbPayload) // 发送到 Prometheus 记录服务
+	if err != nil {
+		glog.Error(ctx, "发送到 Prometheus 记录服务失败: %v", err)
+		return err
+	}
 
 	// 提取其它标签
-	otherlabelsStr = extractOtherLabels(templateVariable)
 
 	// 根据 severity 来构建消息
 	//textMessage := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
@@ -105,7 +175,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" {
-		return s.sendToFeishu(ctx, payload, alertname, severity, env, startsAt, otherlabels, in.Hook)
+		return s.sendToFeishu(ctx, payload, in.Hook)
 	}
 	return nil
 }
@@ -247,99 +317,8 @@ func buildRichTextMessage(alertname, severity, description, env, startsAt, gener
 	}
 }
 
-// 标签解析示例（需根据实际数据结构实现）
-func parseLabels(labelsStr string) map[string]string {
-	// 实现具体的标签解析逻辑
-	return map[string]string{
-		"severity":   "warning",
-		"alertname":  "ai-high-cpu-used",
-		"container":  "ubuntu-container",
-		"env":        "prod",
-		"namespace":  "monitoring",
-		"pod":        "ubuntu-deployment-649b48f48c-w9h98",
-		"prometheus": "monitoring/k8s",
-	}
-}
-
-// 构建标签展示组件
-func buildLabelComponents(labelsStr string) []map[string]interface{} {
-	// 示例标签解析逻辑（需根据实际数据结构实现）
-	labels := parseLabels(labelsStr)
-
-	// 标签分类配置
-	labelGroups := map[string][]string{
-		"🖥️ 系统资源": {"pod", "namespace", "container"},
-		"🚨 告警信息":  {"severity", "alertname"},
-		"🌍 环境配置":  {"env", "cluster"},
-	}
-
-	var components []map[string]interface{}
-
-	for groupName, keys := range labelGroups {
-		var fields []map[string]interface{}
-		for _, k := range keys {
-			if v, ok := labels[k]; ok {
-				fields = append(fields, map[string]interface{}{
-					"tag": "div",
-					"text": map[string]interface{}{
-						"tag": "lark_md",
-						"content": fmt.Sprintf("`%s:` <font color='%s'>%s</font>",
-							k,
-							getLabelColor(k),
-							v),
-					},
-				})
-			}
-		}
-		if len(fields) > 0 {
-			components = append(components, map[string]interface{}{
-				"tag":              "column_set",
-				"flex_mode":        "flow",
-				"background_style": "grey",
-				"columns": []map[string]interface{}{
-					{
-						"tag":    "column",
-						"width":  "weighted",
-						"weight": 30,
-						"elements": []map[string]interface{}{
-							{
-								"tag":     "markdown",
-								"content": fmt.Sprintf("​**​%s**​", groupName),
-							},
-						},
-					},
-					{
-						"tag":      "column",
-						"width":    "weighted",
-						"weight":   70,
-						"elements": fields,
-					},
-				},
-			})
-		}
-	}
-	return components
-}
-
-// 获取标签颜色（示例实现）
-func getLabelColor(key string) string {
-	colorMap := map[string]string{
-		"critical":  "#FF4D4D",
-		"warning":   "#FF9A2E",
-		"pod":       "#3370FF",
-		"namespace": "#3370FF",
-		"container": "#3370FF",
-		"env":       "#00B567",
-		"alertname": "#FF9A2E",
-	}
-	if color, ok := colorMap[key]; ok {
-		return color
-	}
-	return "#666"
-}
-
 // 发送消息到飞书
-func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface{}, alertname, severity, env, startsAt string, otherlabels map[string]interface{}, hook string) error {
+func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface{}, hook string) error {
 	// 将消息体转换为 JSON 字节流
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
