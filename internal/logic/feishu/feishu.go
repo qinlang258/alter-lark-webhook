@@ -127,10 +127,10 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	summary = extractField(templateVariable, "summary")
 	otherlabelsStr = extractOtherLabels(templateVariable)
 
-	dbPayload := make(map[string]string)
+	dbPayload := make(map[string]interface{})
 
 	if status == "resolved" {
-		dbPayload = map[string]string{
+		dbPayload = map[string]interface{}{
 			"alertname":   alertname,
 			"env":         env,
 			"k8s_cluster": "stx",
@@ -145,7 +145,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 			"is_resolved": "1",
 		}
 	} else {
-		dbPayload = map[string]string{
+		dbPayload = map[string]interface{}{
 			"alertname":   alertname,
 			"env":         env,
 			"k8s_cluster": "stx",
@@ -160,9 +160,10 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 		}
 	}
 
-	err = s.sendAsJSON(ctx, dbPayload) // 发送到 Prometheus 记录服务
+	//记录到数据库
+	_, err = service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
-		glog.Error(ctx, "发送到 Prometheus 记录服务失败: %v", err)
+		glog.Error(ctx, "Prometheus告警记录失败: %v", err)
 		return err
 	}
 
