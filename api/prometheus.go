@@ -40,6 +40,7 @@ type PrometheusReportListOutput struct {
 	Id         int
 	Alertname  string `json:"alertname"`
 	K8sCluster string `json:"k8s_cluster"`
+	Env        string `json:"env"`
 	Level      string
 	StartTime  gtime.Time        `json:"start_time"`
 	Labels     map[string]string `json:"Labels"`

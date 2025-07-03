@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alter-lark-webhook
+  labels:
+    app: alter-lark-webhook
+spec:
+  replicas: 1  # 默认副本数为1，可根据需求调整
+  selector:
+    matchLabels:
+      app: alter-lark-webhook
+  template:
+    metadata:
+      labels:
+        app: alter-lark-webhook
+    spec:
+      containers:
+      - name: alter-lark-webhook
+        image: registry.cn-zhangjiakou.aliyuncs.com/jcrose-k8s/alter-lark-webhook:v1.0.16
+        ports:
+        - containerPort: 8000  # 假设镜像默认监听80端口，需根据实际调整
+        imagePullPolicy: IfNotPresent  # 若需强制拉取最新镜像可改为Always
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alter-lark-webhook
+  labels:
+    app: alter-lark-webhook
+spec:
+  selector:
+    app: alter-lark-webhook  # 必须与 Deployment 中 Pod 的标签匹配
+  ports:
+  - protocol: TCP
+    port: 8000       # 服务暴露的端口（建议 Webhook 使用 HTTPS）
+    targetPort: 8000  # 容器内实际监听的端口（需与 Webhook 服务配置一致）
+  type: ClusterIP
+

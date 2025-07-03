@@ -12,7 +12,7 @@ import (
 
 type (
 	IFeishu interface {
-		Notify(ctx context.Context, in *model.FsMsgInput) error
+		Notify(ctx context.Context, in *model.FsMsgInput, status string) error
 	}
 )
 

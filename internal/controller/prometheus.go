@@ -27,7 +27,6 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 	if err := gtime.SetTimeZone("Asia/Shanghai"); err != nil {
 		glog.Fatal(ctx, "时区设置失败:", err)
 	}
-
 	for _, alert := range alters {
 		status := alert.Get("status").String()
 		env := alert.Get("labels.env").String()
@@ -70,7 +69,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 			},
 		}
 
-		if err = service.Feishu().Notify(ctx, &in); err != nil {
+		if err = service.Feishu().Notify(ctx, &in, status); err != nil {
 			g.Log().Errorf("prometheus告警发送到群失败: %s", err.Error())
 			return nil, err
 		}

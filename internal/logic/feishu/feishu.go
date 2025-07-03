@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -28,61 +27,42 @@ func New() *sFeishu {
 }
 
 func (s *sFeishu) formatTimeUtc8(timeStr string) string {
-	layout := "2006-01-02 15:04:05"
-
-	// 解析为UTC时间
-	utcTime, err := time.Parse(layout, timeStr)
-	if err != nil {
-		log.Fatal(err)
+	// 1. 空值或默认零值检查
+	if timeStr == "" || timeStr == "0001-01-01T00:00:00Z" {
+		return "N/A" // 或返回空字符串 ""
 	}
 
-	// 加载东八区时区
+	// 2. 定义支持的格式（兼容原有布局和ISO 8601）
+	layouts := []string{
+		"2006-01-02 15:04:05", // 原有格式
+		time.RFC3339,          // ISO 8601（如 "2025-07-03T08:02:40.243Z"）
+	}
+
+	// 3. 尝试按多种格式解析时间
+	var parsedTime time.Time
+	var err error
+	for _, layout := range layouts {
+		parsedTime, err = time.Parse(layout, timeStr)
+		if err == nil {
+			break // 解析成功则退出循环
+		}
+	}
+	if err != nil {
+		return "Invalid Time" // 所有格式均解析失败
+	}
+
+	// 4. 加载东八区时区（优先使用标准时区，失败则回退）
 	cstLoc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		cstLoc = time.FixedZone("CST", 8*3600)
 	}
 
-	// 转换为东八区时间
-	cstTime := utcTime.In(cstLoc)
-
-	// 返回格式化后的时间字符串
-	return cstTime.Format(layout)
-}
-
-func (s *sFeishu) sendAsJSON(ctx context.Context, fields map[string]string) error {
-	url := "http://jcrose-prometheus-record.jcrose-prometheus-record:8000/api/prometheus/record/save"
-	payload := map[string]interface{}{
-		"msg_type": "text",
-		"content":  fields,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to send message to Feishu: %s", resp.Status)
-	}
-
-	return nil
+	// 5. 转换为东八区并格式化输出
+	return parsedTime.In(cstLoc).Format("2006-01-02 15:04:05")
 }
 
 // Notify 用于向飞书发送通知消息
-func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
+func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status string) error {
 	// 将 content 转换为 JSON 字节流
 	bytesData, err := json.Marshal(in.Content)
 	if err != nil {
@@ -97,10 +77,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	}
 
 	// 安全地访问嵌套字段 alertData
-	var alertname, severity, description, env, startsAt, generatorURL, status, summary string
-	var otherlabelsStr string
-
-	fmt.Println("alertData:           ", alertData)
+	var alertname, severity, description, env, startsAt, generatorURL, summary string
 
 	// 提取 template_variable 字段，进行格式检查
 	data, ok := alertData["data"].(map[string]interface{})
@@ -123,21 +100,23 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 	startsAt = s.formatTimeUtc8(startsAt) // 格式化时间为东八区
 
 	generatorURL = extractField(templateVariable, "generatorURL")
-	status = extractField(templateVariable, "status")
 	summary = extractField(templateVariable, "summary")
-	otherlabelsStr = extractOtherLabels(templateVariable)
 
 	dbPayload := make(map[string]interface{})
 
 	if status == "resolved" {
+		endsAt := extractField(templateVariable, "endsAt")
+		endsAt = s.formatTimeUtc8(endsAt) // 格式化时间为东八区
+
 		dbPayload = map[string]interface{}{
 			"alertname":   alertname,
 			"env":         env,
 			"k8s_cluster": "stx",
 			"level":       severity,
-			"start_time":  extractField(templateVariable, "startsAt"),
-			"end_time":    extractField(templateVariable, "endAt"),
-			"labels":      otherlabelsStr,
+			"start_time":  startsAt,
+			"end_time":    endsAt,
+			"labels":      extractOtherLabels(templateVariable, false), // 提取其他标签并格式化为飞书消息格式
+			// 其他标签提取,
 			"summary":     summary,
 			"status":      status,
 			"description": description,
@@ -150,8 +129,8 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 			"env":         env,
 			"k8s_cluster": "stx",
 			"level":       severity,
-			"start_time":  extractField(templateVariable, "startsAt"),
-			"labels":      otherlabelsStr,
+			"start_time":  startsAt,
+			"labels":      extractOtherLabels(templateVariable, false),
 			"summary":     summary,
 			"status":      status,
 			"description": description,
@@ -160,19 +139,16 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput) error {
 		}
 	}
 
+	fmt.Println("dbPayload: ", dbPayload)
+
 	//记录到数据库
 	_, err = service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
-		glog.Error(ctx, "Prometheus告警记录失败: %v", err)
+		glog.Error(ctx, "Prometheus告警记录添加失败: %v", err)
 		return err
 	}
 
-	// 提取其它标签
-
-	// 根据 severity 来构建消息
-	//textMessage := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr)
-
-	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary)
+	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, extractOtherLabels(templateVariable, true), status, summary)
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" {
@@ -189,26 +165,67 @@ func extractField(data map[string]interface{}, key string) string {
 	return ""
 }
 
-// 提取其他标签并格式化
-func extractOtherLabels(templateVariable map[string]interface{}) string {
-	var builder strings.Builder
-
-	if labels, ok := templateVariable["otherlabels"].(map[string]interface{}); ok {
-		builder.WriteString("{")
-		first := true
-		for k, v := range labels {
-			if !first {
-				builder.WriteString("\n")
-			}
-			builder.WriteString(fmt.Sprintf("%s: %v", k, v))
-			first = false
-		}
-		builder.WriteString("}")
-	} else {
-		builder.WriteString("{}")
+func removeOuterLayer(jsonStr string) (string, error) {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		return "", err
 	}
 
-	return builder.String()
+	// 删除otherlabels键
+	innerData := data["otherlabels"]
+	delete(data, "otherlabels")
+
+	// 将内部字段提升到顶层
+	for k, v := range innerData.(map[string]interface{}) {
+		data[k] = v
+	}
+
+	// 重新序列化
+	result, _ := json.Marshal(data)
+	return string(result), nil
+}
+
+func extractOtherLabels(templateVariable map[string]interface{}, forFeishu bool) string {
+	// 1. 移除 "otherlabels" 外层（如果存在）
+	if _, exists := templateVariable["otherlabels"]; exists {
+		// 提取内部字段并合并到顶层
+		if innerData, ok := templateVariable["otherlabels"].(map[string]interface{}); ok {
+			for k, v := range innerData {
+				templateVariable[k] = v // 将内部字段提升到顶层
+			}
+		}
+		delete(templateVariable, "otherlabels") // 移除外层键
+	}
+
+	// 2. 提取非保留字段
+	otherLabels := make(map[string]interface{})
+	reservedFields := map[string]bool{
+		"alertname": true, "severity": true, "description": true,
+		"env": true, "startsAt": true, "generatorURL": true,
+		"status": true, "summary": true, "endsAt": true,
+	}
+
+	for key, val := range templateVariable {
+		if !reservedFields[key] {
+			otherLabels[key] = val
+		}
+	}
+
+	if len(otherLabels) == 0 {
+		return "{}"
+	}
+
+	// 3. 根据输出格式处理
+	if forFeishu {
+		var sb strings.Builder
+		for k, v := range otherLabels {
+			sb.WriteString(fmt.Sprintf("%s: %v\n", k, v))
+		}
+		return strings.TrimSpace(sb.String())
+	}
+
+	jsonData, _ := json.Marshal(otherLabels)
+	return string(jsonData)
 }
 
 func buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary string) map[string]interface{} {
