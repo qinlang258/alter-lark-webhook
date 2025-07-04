@@ -37,7 +37,6 @@ func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json
 	}
 
 	bodyStr := g.RequestFromCtx(ctx).GetBodyString()
-	fmt.Println("bodyStr:        ", bodyStr)
 
 	bodyJson, err := gjson.DecodeToJson(bodyStr)
 	if err != nil {
@@ -81,7 +80,6 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 
 	if err != nil {
 		glog.Errorf(ctx, "没有找到老的记录: %s", err.Error())
-		return false, err
 	}
 
 	// 如果没有找到未解决的旧记录，则插入新记录
@@ -93,8 +91,7 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 		data.Env = env
 		data.Level = level
 		data.ItemName = itemName
-		fmt.Println("startTime:::::::::::::: ", startTime)
-		data.StartTime = gtime.NewFromStr(startTime).Add(8 * gtime.H)
+		data.StartTime = gtime.NewFromStr(startTime)
 		data.Labels = labels
 		data.Description = tools.GetMapStr(record, "description")
 		data.Summary = summary
@@ -103,7 +100,6 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 		_, err := dao.PrometheusReport.Ctx(ctx).Insert(data)
 		if err != nil {
 			g.Log().Errorf(ctx, "插入新告警记录失败: %s", err.Error())
-			return false, err
 		}
 		return true, nil
 	} else {
@@ -115,7 +111,7 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 				endTime = ""
 				utc8EndTime = nil
 			} else {
-				utc8EndTime = gtime.NewFromStr(endTime).Add(8 * gtime.H)
+				utc8EndTime = gtime.NewFromStr(endTime)
 			}
 			_, err := dao.PrometheusReport.Ctx(ctx).
 				Where("id = ? and item_name = ?", oldRecord.Id, itemName).
@@ -125,10 +121,10 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 				}).
 				Update()
 			if err != nil {
-				g.Log().Errorf(ctx, "更新告警记录失败: %s", err.Error())
+				glog.Errorf(ctx, "更新告警记录失败: %s", err.Error())
 				return false, err
 			}
-			g.Log().Infof(ctx, "更新告警记录成功: %s", oldRecord.Id)
+			glog.Infof(ctx, "更新告警记录成功: %d", oldRecord.Id)
 			return true, nil // 无匹配记录时直接返回
 		}
 	}

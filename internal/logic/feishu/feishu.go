@@ -62,7 +62,7 @@ func (s *sFeishu) formatTimeUtc8(timeStr string) string {
 }
 
 // Notify 用于向飞书发送通知消息
-func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status string) error {
+func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, itemName string) error {
 	// 将 content 转换为 JSON 字节流
 	bytesData, err := json.Marshal(in.Content)
 	if err != nil {
@@ -103,7 +103,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 
 	generatorURL = extractField(templateVariable, "generatorURL")
 	summary = extractField(templateVariable, "summary")
-	itemName := extractField(templateVariable, "itemName")
+	itemName = extractField(templateVariable, "itemName")
 
 	dbPayload := make(map[string]interface{})
 
@@ -143,8 +143,6 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 			"is_resolved": "0",
 		}
 	}
-
-	fmt.Println("dbPayload: -----------------------------------------", dbPayload)
 
 	//记录到数据库
 	_, err = service.Prometheus().Record(ctx, dbPayload)

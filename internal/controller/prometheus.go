@@ -33,11 +33,20 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		generatorURL := alert.Get("generatorURL").String()
 		severity := alert.Get("labels.severity").String()
 		itemName := alert.Get("labels.pod").String()
-		var startsAt gtime.Time
+		var startsAt, endsAt gtime.Time
 
 		if alert.Get("startsAt") != nil {
 			// 这里的时间是UTC时间, 需要转换为本地时间
 			startsAt = *gtime.New(alert.Get("startsAt").String())
+		} else {
+			startsAt = *gtime.New()
+		}
+
+		if alert.Get("endsAt") != nil {
+			// 这里的时间是UTC时间, 需要转换为本地时间
+			endsAt = *gtime.New(alert.Get("endsAt").String())
+		} else {
+			endsAt = *gtime.New()
 		}
 
 		summary := alert.Get("annotations.summary").String()
@@ -60,6 +69,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 						"generatorURL": generatorURL,
 						"severity":     severity,
 						"startsAt":     startsAt,
+						"endsAt":       endsAt,
 						"summary":      summary,
 						"description":  description,
 						"otherlabels":  label,
@@ -70,7 +80,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 			},
 		}
 
-		if err = service.Feishu().Notify(ctx, &in, status); err != nil {
+		if err = service.Feishu().Notify(ctx, &in, status, itemName); err != nil {
 			glog.Error("prometheus告警发送到群失败: %s", err.Error())
 			return nil, err
 		}
