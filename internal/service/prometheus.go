@@ -16,6 +16,7 @@ type (
 	IPrometheus interface {
 		GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json, err error)
 		Record(ctx context.Context, record g.Map) (bool, error)
+		Test(ctx context.Context, query g.Map)
 	}
 )
 

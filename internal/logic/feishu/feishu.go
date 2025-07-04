@@ -66,6 +66,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 	// 将 content 转换为 JSON 字节流
 	bytesData, err := json.Marshal(in.Content)
 	if err != nil {
+		glog.Error(ctx, "Failed to marshal content:", err)
 		return err
 	}
 
@@ -73,6 +74,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 	var alertData map[string]interface{}
 	err = json.Unmarshal(bytesData, &alertData)
 	if err != nil {
+		glog.Error(ctx, err)
 		return err
 	}
 
@@ -101,6 +103,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 
 	generatorURL = extractField(templateVariable, "generatorURL")
 	summary = extractField(templateVariable, "summary")
+	itemName := extractField(templateVariable, "itemName")
 
 	dbPayload := make(map[string]interface{})
 
@@ -112,6 +115,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 			"alertname":   alertname,
 			"env":         env,
 			"k8s_cluster": "stx",
+			"item_name":   itemName, // 添加 itemName 字段
 			"level":       severity,
 			"start_time":  startsAt,
 			"end_time":    endsAt,
@@ -128,6 +132,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 			"alertname":   alertname,
 			"env":         env,
 			"k8s_cluster": "stx",
+			"item_name":   itemName, // 添加 itemName 字段
 			"level":       severity,
 			"start_time":  startsAt,
 			"labels":      extractOtherLabels(templateVariable, false),
@@ -139,7 +144,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status strin
 		}
 	}
 
-	fmt.Println("dbPayload: ", dbPayload)
+	fmt.Println("dbPayload: -----------------------------------------", dbPayload)
 
 	//记录到数据库
 	_, err = service.Prometheus().Record(ctx, dbPayload)
@@ -340,6 +345,7 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 	// 将消息体转换为 JSON 字节流
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
+		glog.Error(ctx, "消息体转换为JSON失败: %v", err)
 		return err
 	}
 
@@ -347,6 +353,7 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 	hookurl := "https://open.larksuite.com/open-apis/bot/v2/hook/" + hook
 	req, err := http.NewRequest("POST", hookurl, bytes.NewBuffer(payloadBytes))
 	if err != nil {
+		glog.Error(ctx, "创建请求失败: %v", err)
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")

@@ -10,15 +10,16 @@ import (
 
 // PrometheusReport is the golang structure for table prometheus_report.
 type PrometheusReport struct {
-	Id          int         `json:"Id"          description:""`     //
-	Alertname   string      `json:"Alertname"   description:"告警类型"` // 告警类型
-	K8SCluster  string      `json:"K8SCluster"  description:"集群名"`  // 集群名
-	Env         string      `json:"Env"         description:"环境"`   // 环境
-	Level       string      `json:"Level"       description:"告警等级"` // 告警等级
-	StartTime   *gtime.Time `json:"StartTime"   description:"开始时间"` // 开始时间
-	EndTime     *gtime.Time `json:"EndTime"     description:"结束时间"` // 结束时间
-	Description string      `json:"Description" description:"描述"`   // 描述
-	Summary     string      `json:"Summary"     description:"概述"`   // 概述
-	Labels      string      `json:"Labels"      description:"标签"`   // 标签
-	IsResolved  int         `json:"IsResolved"  description:"是否解决"` // 是否解决
+	Id          int         `json:"Id"          description:""`             //
+	Alertname   string      `json:"Alertname"   description:"告警类型"`         // 告警类型
+	K8SCluster  string      `json:"K8SCluster"  description:"集群名"`          // 集群名
+	ItemName    string      `json:"ItemName"    description:"podname或者实例名"` // podname或者实例名
+	Env         string      `json:"Env"         description:"环境"`           // 环境
+	Level       string      `json:"Level"       description:"告警等级"`         // 告警等级
+	StartTime   *gtime.Time `json:"StartTime"   description:"开始时间"`         // 开始时间
+	EndTime     *gtime.Time `json:"EndTime"     description:"结束时间"`         // 结束时间
+	Description string      `json:"Description" description:"描述"`           // 描述
+	Summary     string      `json:"Summary"     description:"概述"`           // 概述
+	Labels      string      `json:"Labels"      description:"标签"`           // 标签
+	IsResolved  int         `json:"IsResolved"  description:"是否解决"`         // 是否解决
 }

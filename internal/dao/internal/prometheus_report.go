@@ -23,6 +23,7 @@ type PrometheusReportColumns struct {
 	Id          string //
 	Alertname   string // 告警类型
 	K8SCluster  string // 集群名
+	ItemName    string // podname或者实例名
 	Env         string // 环境
 	Level       string // 告警等级
 	StartTime   string // 开始时间
@@ -38,6 +39,7 @@ var prometheusReportColumns = PrometheusReportColumns{
 	Id:          "id",
 	Alertname:   "alertname",
 	K8SCluster:  "k8s_cluster",
+	ItemName:    "item_name",
 	Env:         "env",
 	Level:       "level",
 	StartTime:   "start_time",

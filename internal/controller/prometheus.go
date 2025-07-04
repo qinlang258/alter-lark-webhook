@@ -7,7 +7,6 @@ import (
 	"alter-lark-webhook/internal/model"
 	"alter-lark-webhook/internal/service"
 
-	"github.com/gogf/gf/frame/g"
 	"github.com/gogf/gf/os/glog"
 	"github.com/gogf/gf/v2/os/gtime"
 )
@@ -33,6 +32,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		alertname := alert.Get("labels.alertname").String()
 		generatorURL := alert.Get("generatorURL").String()
 		severity := alert.Get("labels.severity").String()
+		itemName := alert.Get("labels.pod").String()
 		var startsAt gtime.Time
 
 		if alert.Get("startsAt") != nil {
@@ -55,6 +55,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 				"type": "template",
 				"data": map[string]interface{}{
 					"template_variable": map[string]interface{}{
+						"itemName":     itemName,
 						"alertname":    alertname,
 						"generatorURL": generatorURL,
 						"severity":     severity,
@@ -70,11 +71,18 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		}
 
 		if err = service.Feishu().Notify(ctx, &in, status); err != nil {
-			g.Log().Errorf("prometheus告警发送到群失败: %s", err.Error())
+			glog.Error("prometheus告警发送到群失败: %s", err.Error())
 			return nil, err
 		}
 
 	}
+
+	return nil, nil
+}
+
+func (c *cPrometheus) Test(ctx context.Context, req *api.PrometheusTestReq) (res *api.PrometheusTestRes, err error) {
+
+	service.Prometheus().Test(ctx, make(map[string]interface{}))
 
 	return nil, nil
 }

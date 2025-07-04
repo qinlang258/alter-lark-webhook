@@ -50,3 +50,10 @@ type PrometheusListAlertnameKeyOutput struct {
 	Id        int    `json:"id"`
 	Alertname string `json:"alertname"`
 }
+
+type PrometheusTestReq struct {
+	g.Meta `path:"/api/prometheus/test" method:"post" tags:"prometheus告警推送" summary:"飞书推送告警"`
+}
+
+type PrometheusTestRes struct {
+}

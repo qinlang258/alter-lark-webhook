@@ -15,6 +15,7 @@ type PrometheusReport struct {
 	Id          interface{} //
 	Alertname   interface{} // 告警类型
 	K8SCluster  interface{} // 集群名
+	ItemName    interface{} // podname或者实例名
 	Env         interface{} // 环境
 	Level       interface{} // 告警等级
 	StartTime   *gtime.Time // 开始时间

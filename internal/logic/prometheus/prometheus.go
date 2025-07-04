@@ -6,6 +6,7 @@ import (
 	"alter-lark-webhook/internal/model/entity"
 	"alter-lark-webhook/internal/service"
 
+	"github.com/gogf/gf/v2/os/glog"
 	"github.com/gogf/gf/v2/os/gtime"
 
 	"context"
@@ -56,55 +57,47 @@ func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json
 }
 
 func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
-	data := entity.PrometheusReport{}
+	k8sCluster := tools.GetMapStr(record, "k8s_cluster")
+	alertname := tools.GetMapStr(record, "alertname")
+	env := tools.GetMapStr(record, "env")
+	summary := tools.GetMapStr(record, "summary")
+	level := tools.GetMapStr(record, "level")
+	labels := tools.GetMapStr(record, "labels")
+	itemName := tools.GetMapStr(record, "item_name")
+	startTime := tools.GetMapStr(record, "start_time")
 
 	// 检查是否存在相同条件的未解决记录
-	oldRecord := entity.PrometheusReport{}
-	oldCount, err := dao.PrometheusReport.Ctx(ctx).
-		Where("k8s_cluster", tools.GetMapStr(record, "k8s_cluster")).
-		Where("alertname", tools.GetMapStr(record, "alertname")).
-		Where("env", tools.GetMapStr(record, "env")).
-		Where("summary", tools.GetMapStr(record, "summary")).
-		Where("level", tools.GetMapStr(record, "level")).
-		Where("labels", tools.GetMapStr(record, "labels")).
+	oldRecord := &entity.PrometheusReport{}
+	err := dao.PrometheusReport.Ctx(ctx).
+		Where("k8s_cluster", k8sCluster).
+		Where("alertname", alertname).
+		Where("env", env).
+		Where("item_name", itemName).
+		Where("level", level).
 		Where("is_resolved", 0).
 		Order("start_time DESC").
 		Limit(1).
-		Count()
+		Scan(oldRecord)
 
 	if err != nil {
-		g.Log().Errorf(ctx, "查询旧记录失败: %s", err.Error())
+		glog.Errorf(ctx, "没有找到老的记录: %s", err.Error())
 		return false, err
 	}
 
-	// 如果是已解决的告警，更新旧记录的结束时间
-	if tools.GetMapInt(record, "is_resolved") == 1 {
-		if oldRecord.Id > 0 {
-			endTime := tools.GetMapStr(record, "end_time")
-			utc8EndTime := gtime.NewFromStr(endTime).Add(8 * gtime.H)
-			_, err := dao.PrometheusReport.Ctx(ctx).
-				Where("id", oldRecord.Id).
-				Data(g.Map{
-					"end_time":    utc8EndTime,
-					"is_resolved": 1,
-				}).
-				Update()
-			return err == nil, err
-		}
-		return true, nil // 无匹配记录时直接返回
-	}
-
 	// 如果没有找到未解决的旧记录，则插入新记录
-	if oldCount == 0 {
-		data.Alertname = tools.GetMapStr(record, "alertname")
-		data.K8SCluster = tools.GetMapStr(record, "k8s_cluster")
-		data.Env = tools.GetMapStr(record, "env")
-		data.Level = tools.GetMapStr(record, "level")
-		startTime := tools.GetMapStr(record, "start_time")
+	data := &entity.PrometheusReport{}
+
+	if oldRecord.Id == 0 && oldRecord.IsResolved == 0 {
+		data.Alertname = alertname
+		data.K8SCluster = k8sCluster
+		data.Env = env
+		data.Level = level
+		data.ItemName = itemName
+		fmt.Println("startTime:::::::::::::: ", startTime)
 		data.StartTime = gtime.NewFromStr(startTime).Add(8 * gtime.H)
-		data.Labels = tools.GetMapStr(record, "labels")
+		data.Labels = labels
 		data.Description = tools.GetMapStr(record, "description")
-		data.Summary = tools.GetMapStr(record, "summary")
+		data.Summary = summary
 		data.IsResolved = 0
 
 		_, err := dao.PrometheusReport.Ctx(ctx).Insert(data)
@@ -113,8 +106,42 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 			return false, err
 		}
 		return true, nil
+	} else {
+		// 如果是已解决的告警，更新旧记录的结束时间
+		if tools.GetMapStr(record, "is_resolved") == "1" {
+			endTime := tools.GetMapStr(record, "end_time")
+			var utc8EndTime *gtime.Time
+			if endTime == "N/A" {
+				endTime = ""
+				utc8EndTime = nil
+			} else {
+				utc8EndTime = gtime.NewFromStr(endTime).Add(8 * gtime.H)
+			}
+			_, err := dao.PrometheusReport.Ctx(ctx).
+				Where("id = ? and item_name = ?", oldRecord.Id, itemName).
+				Data(g.Map{
+					"end_time":    utc8EndTime,
+					"is_resolved": 1,
+				}).
+				Update()
+			if err != nil {
+				g.Log().Errorf(ctx, "更新告警记录失败: %s", err.Error())
+				return false, err
+			}
+			g.Log().Infof(ctx, "更新告警记录成功: %s", oldRecord.Id)
+			return true, nil // 无匹配记录时直接返回
+		}
 	}
-
 	// 存在重复记录时跳过插入
 	return true, nil
+}
+
+func (s *sPrometheus) Test(ctx context.Context, query g.Map) {
+	data := entity.PrometheusReport{}
+	err := dao.PrometheusReport.Ctx(ctx).Where("id = ?", 555).Scan(&data)
+	if err != nil {
+		glog.Error(ctx, err.Error())
+	}
+
+	fmt.Println(data)
 }
