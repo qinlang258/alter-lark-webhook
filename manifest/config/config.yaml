@@ -16,3 +16,12 @@ database:
     link: "mysql:jcrose-cmdb:o*anqRCC8wid@tcp(common-test-db.ctsksym0mj1g.ap-east-1.rds.amazonaws.com:3306)/cmdb?loc=Asia%2FShanghai"
     #link: "mysql:root:ql2252528@tcp(192.168.44.131:3306)/cmdb?loc=Asia%2FShanghai"
     debug: true
+
+# git相关配置
+gitlab:
+  url: "https://dev.stx365.com"
+  # cmdb调用gitlab的api时需要的token
+  #token: "ZJpHBWyaPMh1hufrjpYv" # 对应admin的 api token
+  token: "iCPDzsx6pvk3QFzATYpj" 
+  #  X-Gitlab-Token的值, 是gitlab触发webhook请求时, http header中的一个参数
+  webhookToken: "aCmwqRKvzgqsCzd74kY4"

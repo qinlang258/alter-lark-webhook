@@ -6,6 +6,7 @@ package logic
 
 import (
 	_ "alter-lark-webhook/internal/logic/feishu"
+	_ "alter-lark-webhook/internal/logic/gitlab"
 	_ "alter-lark-webhook/internal/logic/prometheus"
 	_ "alter-lark-webhook/internal/logic/tools"
 )

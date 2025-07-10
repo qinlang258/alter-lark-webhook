@@ -20,6 +20,7 @@ var (
 				group.Middleware(ghttp.MiddlewareHandlerResponse)
 				group.Bind(
 					controller.Prometheus,
+					controller.Gitlab,
 				)
 			})
 			s.SetPort(8000)
