@@ -86,26 +86,26 @@ func (s *sFeishu) formatTimeUtc8(timeStr string) string {
 
 // Notify 用于向飞书发送通知消息
 func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, itemName string) error {
-	// 将 content 转换为 JSON 字节流
-	// bytesData, err := json.Marshal(in.Content)
-	// if err != nil {
-	// 	glog.Error(ctx, "Failed to marshal content:", err)
-	// 	return err
-	// }
+	//将 content 转换为 JSON 字节流
+	bytesData, err := json.Marshal(in.Content)
+	if err != nil {
+		glog.Error(ctx, "Failed to marshal content:", err)
+		return err
+	}
 
-	// // 初始化提取的字段变量
-	// var alertData map[string]interface{}
-	// err = json.Unmarshal(bytesData, &alertData)
-	// if err != nil {
-	// 	glog.Error(ctx, err)
-	// 	return err
-	// }
+	// 初始化提取的字段变量
+	var alertData map[string]interface{}
+	err = json.Unmarshal(bytesData, &alertData)
+	if err != nil {
+		glog.Error(ctx, err)
+		return err
+	}
 
 	// 安全地访问嵌套字段 alertData
 	var alertname, severity, description, env, startsAt, generatorURL, summary string
 
 	// 提取 template_variable 字段，进行格式检查
-	data, ok := in.Content["data"].(map[string]interface{})
+	data, ok := alertData["data"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("data field missing or not in expected format")
 	}
@@ -168,7 +168,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	}
 
 	//记录到数据库
-	_, err := service.Prometheus().Record(ctx, dbPayload)
+	_, err = service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
 		glog.Error(ctx, "Prometheus告警记录添加失败: %v", err)
 		return err
@@ -271,7 +271,7 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 }
 
 func (s *sFeishu) SendPrometheusOomAlertToFeishu(ctx context.Context, payload map[string]interface{}, status, userId string) error {
-	var alertname, severity, description, env, startsAt, generatorURL, summary string
+	var alertname, severity, description, env, startsAt, summary string
 
 	// 提取 template_variable 字段，进行格式检查
 	data, ok := payload["data"].(map[string]interface{})
@@ -293,11 +293,10 @@ func (s *sFeishu) SendPrometheusOomAlertToFeishu(ctx context.Context, payload ma
 	startsAt = tools.ExtractField(templateVariable, "startsAt")
 	startsAt = s.formatTimeUtc8(startsAt) // 格式化时间为东八区
 
-	generatorURL = tools.ExtractField(templateVariable, "generatorURL")
 	summary = tools.ExtractField(templateVariable, "summary")
 	//itemName = tools.ExtractField(templateVariable, "itemName")
 
-	applicationPayload := tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
+	applicationPayload := tools.BuildOOMRichTextMessage(alertname, severity, description, env, startsAt, tools.ExtractOtherLabels(templateVariable, true), status, summary)
 
 	// 序列化内容
 	contentJSON, err := json.Marshal(applicationPayload)

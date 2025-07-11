@@ -69,8 +69,6 @@ func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (m
 	message["projectPath"] = match[1]
 	message["serviceName"] = match[2]
 
-	fmt.Println(message)
-
 	projectId, err := s.GetProjectIDByPath(ctx, match[1])
 	if err != nil {
 		glog.Error(ctx, err.Error())
@@ -83,8 +81,6 @@ func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (m
 		glog.Error(ctx, err.Error())
 		//return nil, fmt.Errorf("查询提交信息失败: %v", err)
 	}
-
-	fmt.Println(commit)
 
 	message["committerName"] = commit.CommitterName
 	message["committerEmail"] = commit.CommitterEmail
@@ -106,8 +102,8 @@ func (s *sGitlab) GetByImageUrlSendOomToFeishu(ctx context.Context, imageUrl str
 	//根据 serviceName 获取最近的告警日志
 	var prometheusReport entity.PrometheusReport
 	err = dao.PrometheusReport.Ctx(ctx).
-		Where("item_name like ?", data["serviceName"]).
-		Where("is_resolved = 0").
+		Where("item_name like ?", fmt.Sprintf("%%%s%%", data["serviceName"])).
+		Where("is_resolved = 1").
 		OrderDesc("start_time").
 		Scan(&prometheusReport)
 
