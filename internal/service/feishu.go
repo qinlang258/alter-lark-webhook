@@ -13,7 +13,8 @@ import (
 type (
 	IFeishu interface {
 		Notify(ctx context.Context, in *model.FsMsgInput, status, itemName string) error
-		SendToFeishuApplication(ctx context.Context, payload map[string]interface{}, itemName string) error
+		GetUserIdByCommitItem(ctx context.Context, itemName string) (*string, error)
+		SendPrometheusOomAlertToFeishu(ctx context.Context, payload map[string]interface{}, status, userId string) error
 	}
 )
 

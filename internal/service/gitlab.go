@@ -13,6 +13,7 @@ type (
 	IGitlab interface {
 		GetProjectIDByPath(ctx context.Context, projectPath string) (int, error)
 		GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (map[string]string, error)
+		GetByImageUrlSendOomToFeishu(ctx context.Context, imageUrl string) (map[string]string, map[string]interface{}, error)
 	}
 )
 

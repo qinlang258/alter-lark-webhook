@@ -2,15 +2,15 @@ package feishu
 
 import (
 	"alter-lark-webhook/internal/dao"
+	"alter-lark-webhook/internal/logic/tools"
 	"alter-lark-webhook/internal/model"
 	"alter-lark-webhook/internal/model/entity"
 	"alter-lark-webhook/internal/service"
+
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
-	"strings"
 	"time"
 
 	"net/http"
@@ -19,6 +19,7 @@ import (
 	"github.com/gogf/gf/v2/os/glog"
 	larkv3 "github.com/larksuite/oapi-sdk-go/v3"
 	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 type sFeishu struct {
@@ -86,25 +87,25 @@ func (s *sFeishu) formatTimeUtc8(timeStr string) string {
 // Notify 用于向飞书发送通知消息
 func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, itemName string) error {
 	// 将 content 转换为 JSON 字节流
-	bytesData, err := json.Marshal(in.Content)
-	if err != nil {
-		glog.Error(ctx, "Failed to marshal content:", err)
-		return err
-	}
+	// bytesData, err := json.Marshal(in.Content)
+	// if err != nil {
+	// 	glog.Error(ctx, "Failed to marshal content:", err)
+	// 	return err
+	// }
 
-	// 初始化提取的字段变量
-	var alertData map[string]interface{}
-	err = json.Unmarshal(bytesData, &alertData)
-	if err != nil {
-		glog.Error(ctx, err)
-		return err
-	}
+	// // 初始化提取的字段变量
+	// var alertData map[string]interface{}
+	// err = json.Unmarshal(bytesData, &alertData)
+	// if err != nil {
+	// 	glog.Error(ctx, err)
+	// 	return err
+	// }
 
 	// 安全地访问嵌套字段 alertData
 	var alertname, severity, description, env, startsAt, generatorURL, summary string
 
 	// 提取 template_variable 字段，进行格式检查
-	data, ok := alertData["data"].(map[string]interface{})
+	data, ok := in.Content["data"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("data field missing or not in expected format")
 	}
@@ -115,22 +116,22 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	}
 
 	// 提取具体字段
-	alertname = extractField(templateVariable, "alertname")
-	severity = extractField(templateVariable, "severity")
-	description = extractField(templateVariable, "description")
-	env = extractField(templateVariable, "env")
+	alertname = tools.ExtractField(templateVariable, "alertname")
+	severity = tools.ExtractField(templateVariable, "severity")
+	description = tools.ExtractField(templateVariable, "description")
+	env = tools.ExtractField(templateVariable, "env")
 
-	startsAt = extractField(templateVariable, "startsAt")
+	startsAt = tools.ExtractField(templateVariable, "startsAt")
 	startsAt = s.formatTimeUtc8(startsAt) // 格式化时间为东八区
 
-	generatorURL = extractField(templateVariable, "generatorURL")
-	summary = extractField(templateVariable, "summary")
-	itemName = extractField(templateVariable, "itemName")
+	generatorURL = tools.ExtractField(templateVariable, "generatorURL")
+	summary = tools.ExtractField(templateVariable, "summary")
+	itemName = tools.ExtractField(templateVariable, "itemName")
 
 	dbPayload := make(map[string]interface{})
 
 	if status == "resolved" {
-		endsAt := extractField(templateVariable, "endsAt")
+		endsAt := tools.ExtractField(templateVariable, "endsAt")
 		endsAt = s.formatTimeUtc8(endsAt) // 格式化时间为东八区
 
 		dbPayload = map[string]interface{}{
@@ -141,7 +142,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 			"level":       severity,
 			"start_time":  startsAt,
 			"end_time":    endsAt,
-			"labels":      extractOtherLabels(templateVariable, false), // 提取其他标签并格式化为飞书消息格式
+			"labels":      tools.ExtractOtherLabels(templateVariable, false), // 提取其他标签并格式化为飞书消息格式
 			// 其他标签提取,
 			"summary":     summary,
 			"status":      status,
@@ -157,7 +158,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 			"item_name":   itemName, // 添加 itemName 字段
 			"level":       severity,
 			"start_time":  startsAt,
-			"labels":      extractOtherLabels(templateVariable, false),
+			"labels":      tools.ExtractOtherLabels(templateVariable, false),
 			"summary":     summary,
 			"status":      status,
 			"description": description,
@@ -167,253 +168,46 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	}
 
 	//记录到数据库
-	_, err = service.Prometheus().Record(ctx, dbPayload)
+	_, err := service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
 		glog.Error(ctx, "Prometheus告警记录添加失败: %v", err)
 		return err
 	}
 
-	payload := buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, extractOtherLabels(templateVariable, true), status, summary)
+	payload := tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" {
-		return s.sendToFeishu(ctx, payload, in.Hook)
+		s.sendToFeishu(ctx, payload, in.Hook)
 	}
 
+	glog.Info(ctx, "开始执行异常容器的监控")
 	//新增对异常容器的
 	if alertname == "KubePodCrashLooping" {
-		return s.SendToFeishuApplication(ctx, payload, itemName)
+		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
+		if err != nil {
+			return err
+		}
+		service.Feishu().SendPrometheusOomAlertToFeishu(ctx, payload, status, *userId)
+
 	}
 	return nil
 }
 
-// 提取字段
-func extractField(data map[string]interface{}, key string) string {
-	if val, ok := data[key].(string); ok {
-		return val
-	}
-	return ""
-}
-
-func removeOuterLayer(jsonStr string) (string, error) {
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
-		return "", err
-	}
-
-	// 删除otherlabels键
-	innerData := data["otherlabels"]
-	delete(data, "otherlabels")
-
-	// 将内部字段提升到顶层
-	for k, v := range innerData.(map[string]interface{}) {
-		data[k] = v
-	}
-
-	// 重新序列化
-	result, _ := json.Marshal(data)
-	return string(result), nil
-}
-
-func extractOtherLabels(templateVariable map[string]interface{}, forFeishu bool) string {
-	// 1. 移除 "otherlabels" 外层（如果存在）
-	if _, exists := templateVariable["otherlabels"]; exists {
-		// 提取内部字段并合并到顶层
-		if innerData, ok := templateVariable["otherlabels"].(map[string]interface{}); ok {
-			for k, v := range innerData {
-				templateVariable[k] = v // 将内部字段提升到顶层
-			}
-		}
-		delete(templateVariable, "otherlabels") // 移除外层键
-	}
-
-	// 2. 提取非保留字段
-	otherLabels := make(map[string]interface{})
-	reservedFields := map[string]bool{
-		"alertname": true, "severity": true, "description": true,
-		"env": true, "startsAt": true, "generatorURL": true,
-		"status": true, "summary": true, "endsAt": true,
-	}
-
-	for key, val := range templateVariable {
-		if !reservedFields[key] {
-			otherLabels[key] = val
-		}
-	}
-
-	if len(otherLabels) == 0 {
-		return "{}"
-	}
-
-	// 3. 根据输出格式处理
-	if forFeishu {
-		var sb strings.Builder
-		for k, v := range otherLabels {
-			sb.WriteString(fmt.Sprintf("%s: %v\n", k, v))
-		}
-		return strings.TrimSpace(sb.String())
-	}
-
-	jsonData, _ := json.Marshal(otherLabels)
-	return string(jsonData)
-}
-
-func buildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary string) map[string]interface{} {
-	// 初始化变量
-	var color, titlePrefix string
-	isResolved := status == "resolved"
-
-	// 设置状态和颜色
-	if isResolved {
-		status = "告警恢复"
-		color = "green"
-		titlePrefix = "✅"
-	} else {
-		status = "告警通知"
-		titlePrefix = "⚠️"
-		switch severity {
-		case "critical":
-			color = "red"
-		case "warning":
-			color = "orange"
-		default:
-			color = "blue"
-		}
-	}
-
-	// 构建消息卡片
-	return map[string]interface{}{
-		"msg_type": "interactive",
-		"card": map[string]interface{}{
-			"header": map[string]interface{}{
-				"title": map[string]interface{}{
-					"tag":     "plain_text",
-					"content": fmt.Sprintf("%s【%s】%s", titlePrefix, strings.ToUpper(severity), status),
-				},
-				"template": color,
-			},
-			"elements": []map[string]interface{}{
-				{
-					"tag": "div",
-					"fields": []map[string]interface{}{
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("​**告警名称**:\n%s", alertname),
-							},
-						},
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("​**状态**:\n<font color=\"%s\">%s</font>", color, status),
-							},
-						},
-					},
-				},
-				{
-					"tag": "div",
-					"fields": []map[string]interface{}{
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("​**环境**:\n%s", env),
-							},
-						},
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("​**时间**:\n%s", startsAt),
-							},
-						},
-					},
-				},
-				{
-					"tag":     "markdown",
-					"content": fmt.Sprintf("​**描述**:\n%s", description),
-				},
-				{
-					"tag":     "markdown",
-					"content": fmt.Sprintf("​**summary**:\n%s", summary),
-				},
-				{
-					"tag":     "markdown",
-					"content": fmt.Sprintf("​**其他标签**:\n```\n%s\n```", otherlabelsStr),
-				},
-				{
-					"tag": "hr",
-				},
-				{
-					"tag": "action",
-					"actions": []map[string]interface{}{
-						{
-							"tag": "button",
-							"text": map[string]interface{}{
-								"tag":     "plain_text",
-								"content": "查看详情",
-							},
-							"url":  generatorURL,
-							"type": "primary",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func (s *sFeishu) extractDeploymentOrSTSName(podName string) string {
-	// 正则表达式匹配Deployment Pod名称（带hash的部分）
-	deploymentRegex := regexp.MustCompile(`^(.*)-[a-z0-9]{8,10}-[a-z0-9]{5}$`)
-	// 正则表达式匹配StatefulSet Pod名称（带数字的部分）
-	stsRegex := regexp.MustCompile(`^(.*)-\d+$`)
-
-	if deploymentRegex.MatchString(podName) {
-		matches := deploymentRegex.FindStringSubmatch(podName)
-		if len(matches) >= 2 {
-			return matches[1] // 返回Deployment名称
-		}
-	} else if stsRegex.MatchString(podName) {
-		matches := stsRegex.FindStringSubmatch(podName)
-		if len(matches) >= 2 {
-			return matches[1] // 返回STS名称
-		}
-	}
-
-	return podName // 如果都不匹配，返回原始名称
-}
-
 // gitlab的相关接口可以根据环境变量传递容器镜像地址。prometheus并没有这个参数
-func (s *sFeishu) SendToFeishuApplication(ctx context.Context, payload map[string]interface{}, itemName string) error {
+func (s *sFeishu) GetUserIdByCommitItem(ctx context.Context, itemName string) (*string, error) {
 
-	// data, err := service.Gitlab().GetUserInfoByImageUrl(ctx, imageUrl)
-	// if err != nil {
-	// 	glog.Error(ctx, err)
-	// 	return err
-	// }
-
-	// // 序列化内容
-	// contentJSON, err := json.Marshal(payload)
-	// if err != nil {
-	// 	glog.Error(ctx, "序列化富文本内容失败: %v\n", err)
-	// 	return err
-	// }
-
-	//service.Gitlab().GetUserInfoByImageUrl(ctx)
-
-	workloadName := s.extractDeploymentOrSTSName(itemName)
+	workloadName := tools.ExtractDeploymentOrSTSName(itemName)
 
 	var deployRecord entity.DeployHistory
 	dao.DeployHistory.Ctx(ctx).
 		Where("service_name = ?", workloadName).
-		Where("type like ?", fmt.Sprintf("%%%s%%"), "cd").
+		Where("type like ?", fmt.Sprintf("%%%s%%", "cd")).
 		OrderDesc("deploy_time").
 		Scan(&deployRecord)
 
 	data, err := service.Gitlab().GetUserInfoByImageUrl(ctx, deployRecord.Image)
+	fmt.Println(data)
 
 	// 构建消息体
 	req := larkcontact.NewBatchGetIdUserReqBuilder().
@@ -426,22 +220,23 @@ func (s *sFeishu) SendToFeishuApplication(ctx context.Context, payload map[strin
 		Build()
 
 	// 发送消息
-	resp, err := s.client.Contact.User.BatchGetId(context.Background(), req)
+	resp, err := s.client.Contact.User.BatchGetId(ctx, req)
 	if err != nil {
-		glog.Error(ctx, "发送消息失败: %v\n", err)
-		return err
+		glog.Error(ctx, "获取user_id失败: %v\n", err)
+		return nil, err
 	}
-
-	fmt.Println("resp--------------------------------------", resp)
 
 	// 服务端错误处理
 	if !resp.Success() {
 		glog.Error(ctx, "logId: %s, error response: code=%d, msg=%s\n", resp.RequestId(), resp.Code, resp.Msg)
-		return err
+		return nil, err
 	}
 
-	glog.Info(ctx, "消息发送成功: %s\n", resp.Msg)
-	return nil
+	if len(resp.Data.UserList) == 1 {
+		return resp.Data.UserList[0].UserId, nil
+	} else {
+		return nil, fmt.Errorf("没有找到或者找到多个用户")
+	}
 
 }
 
@@ -473,4 +268,71 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (s *sFeishu) SendPrometheusOomAlertToFeishu(ctx context.Context, payload map[string]interface{}, status, userId string) error {
+	var alertname, severity, description, env, startsAt, generatorURL, summary string
+
+	// 提取 template_variable 字段，进行格式检查
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("data field missing or not in expected format")
+	}
+
+	templateVariable, ok := data["template_variable"].(map[string]interface{})
+	if !ok {
+		glog.Error(ctx, "template_variable 字段缺失或格式不符合预期")
+	}
+
+	// 提取具体字段
+	alertname = tools.ExtractField(templateVariable, "alertname")
+	severity = tools.ExtractField(templateVariable, "severity")
+	description = tools.ExtractField(templateVariable, "description")
+	env = tools.ExtractField(templateVariable, "env")
+
+	startsAt = tools.ExtractField(templateVariable, "startsAt")
+	startsAt = s.formatTimeUtc8(startsAt) // 格式化时间为东八区
+
+	generatorURL = tools.ExtractField(templateVariable, "generatorURL")
+	summary = tools.ExtractField(templateVariable, "summary")
+	//itemName = tools.ExtractField(templateVariable, "itemName")
+
+	applicationPayload := tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
+
+	// 序列化内容
+	contentJSON, err := json.Marshal(applicationPayload)
+	if err != nil {
+		glog.Error(ctx, "序列化富文本内容失败: %v\n", err)
+		return err
+	}
+
+	// 构建消息体
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType("open_id").
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(userId).
+			MsgType("interactive").
+			Content(string(contentJSON)).
+			Build()).
+		Build()
+
+	// 发送消息
+	resp, err := s.client.Im.V1.Message.Create(ctx, req)
+	if err != nil {
+		glog.Error(ctx, "发送消息失败: %v\n", err)
+		return err
+	}
+
+	fmt.Println("resp--------------------------------------", resp)
+
+	// 服务端错误处理
+	if !resp.Success() {
+		glog.Error(ctx, "logId: %s, error response: code=%d, msg=%s\n", resp.RequestId(), resp.Code, resp.Msg)
+		glog.Error(ctx, resp.Msg)
+		return err
+	}
+
+	glog.Info(ctx, "消息发送成功: %s\n", resp.Msg)
+	return nil
+
 }

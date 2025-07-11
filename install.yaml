@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: alter-lark-webhook
-        image: registry.cn-zhangjiakou.aliyuncs.com/jcrose-k8s/alter-lark-webhook:v1.0.16
+        image: registry.cn-zhangjiakou.aliyuncs.com/jcrose-k8s/alter-lark-webhook:v1.0.22
         ports:
         - containerPort: 8000  # 假设镜像默认监听80端口，需根据实际调整
         imagePullPolicy: IfNotPresent  # 若需强制拉取最新镜像可改为Always

@@ -1,6 +1,9 @@
 package gitlab
 
 import (
+	"alter-lark-webhook/internal/dao"
+	"alter-lark-webhook/internal/logic/tools"
+	"alter-lark-webhook/internal/model/entity"
 	"alter-lark-webhook/internal/service"
 	"context"
 	"fmt"
@@ -43,6 +46,7 @@ func (s *sGitlab) GetProjectIDByPath(ctx context.Context, projectPath string) (i
 	if err != nil {
 		return 0, fmt.Errorf("查询项目失败: %v", err)
 	}
+
 	return project.ID, nil
 
 }
@@ -53,7 +57,7 @@ func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (m
 	message := make(map[string]string)
 
 	fieldsList := strings.Split(imageUrl, ":")
-	commitId := strings.Split(fieldsList[1], "-")[3]
+	commitId := strings.Split(fieldsList[1], "-")[2]
 
 	imageRe := regexp.MustCompile(`116981788283.dkr.ecr.ap-east-1.amazonaws.com/(.*?).git/([^:]+)`)
 
@@ -65,6 +69,8 @@ func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (m
 	message["projectPath"] = match[1]
 	message["serviceName"] = match[2]
 
+	fmt.Println(message)
+
 	projectId, err := s.GetProjectIDByPath(ctx, match[1])
 	if err != nil {
 		glog.Error(ctx, err.Error())
@@ -74,13 +80,44 @@ func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (m
 	// 查询提交信息
 	commit, _, err := s.GitClient.Commits.GetCommit(projectId, commitId, &gitlab.GetCommitOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("查询提交信息失败: %v", err)
+		glog.Error(ctx, err.Error())
+		//return nil, fmt.Errorf("查询提交信息失败: %v", err)
 	}
+
+	fmt.Println(commit)
 
 	message["committerName"] = commit.CommitterName
 	message["committerEmail"] = commit.CommitterEmail
 	message["commitId"] = commitId
 
+	//fmt.Println("============================ ", message)
+
 	return message, nil
+
+}
+
+func (s *sGitlab) GetByImageUrlSendOomToFeishu(ctx context.Context, imageUrl string) (map[string]string, map[string]interface{}, error) {
+	data, err := s.GetUserInfoByImageUrl(ctx, imageUrl)
+	if err != nil {
+		glog.Error(ctx, err)
+		return nil, nil, err
+	}
+
+	//根据 serviceName 获取最近的告警日志
+	var prometheusReport entity.PrometheusReport
+	err = dao.PrometheusReport.Ctx(ctx).
+		Where("item_name like ?", data["serviceName"]).
+		Where("is_resolved = 0").
+		OrderDesc("start_time").
+		Scan(&prometheusReport)
+
+	if err != nil {
+		glog.Error(ctx, err.Error())
+		return nil, nil, err
+	}
+
+	oomPayload := tools.BuildOOMRichTextMessage(prometheusReport.Alertname, prometheusReport.Level, prometheusReport.Description, prometheusReport.Env, prometheusReport.StartTime.String(), prometheusReport.Labels, prometheusReport.Level, prometheusReport.Summary)
+
+	return data, oomPayload, nil
 
 }

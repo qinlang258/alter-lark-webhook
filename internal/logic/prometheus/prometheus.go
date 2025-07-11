@@ -55,6 +55,8 @@ func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json
 	return alerts, nil
 }
 
+// func (s *sPrometheus) FormatPrometheusAlertData(ctx context.Context)
+
 func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 	k8sCluster := tools.GetMapStr(record, "k8s_cluster")
 	alertname := tools.GetMapStr(record, "alertname")
