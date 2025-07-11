@@ -12,7 +12,7 @@ import (
 type (
 	IGitlab interface {
 		GetProjectIDByPath(ctx context.Context, projectPath string) (int, error)
-		SendOomToFeishu(ctx context.Context, imageUrl string) (bool, error)
+		GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (map[string]string, error)
 	}
 )
 

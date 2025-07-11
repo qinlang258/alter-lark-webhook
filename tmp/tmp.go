@@ -6,10 +6,19 @@ import (
 )
 
 func main() {
-	url := "116981788283.dkr.ecr.ap-east-1.amazonaws.com/chief/user/chief-sso.git/sso-server:dev-dev-68c9e27e-20250710_103848"
+	//message := make(map[string]string)
 
-	re := regexp.MustCompile(`116981788283.dkr.ecr.ap-east-1.amazonaws.com/(.*?).git`)
+	imageUrl := "116981788283.dkr.ecr.ap-east-1.amazonaws.com/chief-web/chief_fe_webapp.git/chief-fe-webapp:allenv-master-dab34715-20250710_191904"
 
-	match := re.FindStringSubmatch(url)
-	fmt.Println(match[1])
+	//fieldsList := strings.Split(imageUrl, ":")
+	//commitId := strings.Split(fieldsList[1], "-")[3]
+
+	imageRe := regexp.MustCompile(`116981788283.dkr.ecr.ap-east-1.amazonaws.com/(.*?).git/([^:]+)`)
+
+	match := imageRe.FindStringSubmatch(imageUrl)
+
+	// message["projectPath"] = match[1]
+	// message["serviceName"] = match[2]
+	fmt.Println("imageUrl: ", imageUrl)
+	fmt.Println(match)
 }

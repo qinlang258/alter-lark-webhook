@@ -47,35 +47,40 @@ func (s *sGitlab) GetProjectIDByPath(ctx context.Context, projectPath string) (i
 
 }
 
-func (s *sGitlab) SendOomToFeishu(ctx context.Context, imageUrl string) (bool, error) {
+func (s *sGitlab) GetUserInfoByImageUrl(ctx context.Context, imageUrl string) (map[string]string, error) {
 	// 原始 imageUrl: 116981788283.dkr.ecr.ap-east-1.amazonaws.com/chief/user/chief-sso.git/sso-server:dev-dev-68c9e27e-20250710_103848
+
+	message := make(map[string]string)
 
 	fieldsList := strings.Split(imageUrl, ":")
 	commitId := strings.Split(fieldsList[1], "-")[3]
 
-	re := regexp.MustCompile(`116981788283.dkr.ecr.ap-east-1.amazonaws.com/(.*?).git`)
+	imageRe := regexp.MustCompile(`116981788283.dkr.ecr.ap-east-1.amazonaws.com/(.*?).git/([^:]+)`)
 
-	match := re.FindStringSubmatch(imageUrl)
-	if len(match) < 2 {
-		return false, fmt.Errorf("未找到匹配的 Git 路径")
+	match := imageRe.FindStringSubmatch(imageUrl)
+	if len(match) < 3 {
+		return nil, fmt.Errorf("未找到匹配的 Git 路径")
 	}
+
+	message["projectPath"] = match[1]
+	message["serviceName"] = match[2]
 
 	projectId, err := s.GetProjectIDByPath(ctx, match[1])
 	if err != nil {
 		glog.Error(ctx, err.Error())
-		return false, err
+		return nil, err
 	}
 
 	// 查询提交信息
 	commit, _, err := s.GitClient.Commits.GetCommit(projectId, commitId, &gitlab.GetCommitOptions{})
 	if err != nil {
-		return false, fmt.Errorf("查询提交信息失败: %v", err)
+		return nil, fmt.Errorf("查询提交信息失败: %v", err)
 	}
 
-	committerName := commit.CommitterName
-	committerEmail := commit.CommitterEmail
+	message["committerName"] = commit.CommitterName
+	message["committerEmail"] = commit.CommitterEmail
+	message["commitId"] = commitId
 
-	fmt.Println(committerName, committerEmail, commit.AuthorEmail)
+	return message, nil
 
-	return true, nil
 }

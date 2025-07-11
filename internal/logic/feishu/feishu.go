@@ -1,25 +1,47 @@
 package feishu
 
 import (
+	"alter-lark-webhook/internal/dao"
 	"alter-lark-webhook/internal/model"
+	"alter-lark-webhook/internal/model/entity"
 	"alter-lark-webhook/internal/service"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"net/http"
 
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/glog"
+	larkv3 "github.com/larksuite/oapi-sdk-go/v3"
+	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 )
 
 type sFeishu struct {
+	client *larkv3.Client
 }
 
 func init() {
-	service.RegisterFeishu(New())
+	fs := New()
+	ctx := context.Background()
+
+	// 读取配置
+	appId := g.Cfg().MustGet(ctx, "feishu.appId").String()
+	appSecret := g.Cfg().MustGet(ctx, "feishu.appSecret").String()
+
+	if appId == "" || appSecret == "" {
+		glog.Errorf(ctx, "飞书配置缺失: appId=%s, appSecret=%s", appId, appSecret)
+		panic("无法初始化飞书客户端：配置缺失")
+	}
+
+	fs.client = larkv3.NewClient(appId, appSecret, larkv3.WithOpenBaseUrl(larkv3.LarkBaseUrl))
+
+	service.RegisterFeishu(fs)
+
 }
 
 func New() *sFeishu {
@@ -156,6 +178,11 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" {
 		return s.sendToFeishu(ctx, payload, in.Hook)
+	}
+
+	//新增对异常容器的
+	if alertname == "KubePodCrashLooping" {
+		return s.SendToFeishuApplication(ctx, payload, itemName)
 	}
 	return nil
 }
@@ -336,6 +363,86 @@ func buildRichTextMessage(alertname, severity, description, env, startsAt, gener
 			},
 		},
 	}
+}
+
+func (s *sFeishu) extractDeploymentOrSTSName(podName string) string {
+	// 正则表达式匹配Deployment Pod名称（带hash的部分）
+	deploymentRegex := regexp.MustCompile(`^(.*)-[a-z0-9]{8,10}-[a-z0-9]{5}$`)
+	// 正则表达式匹配StatefulSet Pod名称（带数字的部分）
+	stsRegex := regexp.MustCompile(`^(.*)-\d+$`)
+
+	if deploymentRegex.MatchString(podName) {
+		matches := deploymentRegex.FindStringSubmatch(podName)
+		if len(matches) >= 2 {
+			return matches[1] // 返回Deployment名称
+		}
+	} else if stsRegex.MatchString(podName) {
+		matches := stsRegex.FindStringSubmatch(podName)
+		if len(matches) >= 2 {
+			return matches[1] // 返回STS名称
+		}
+	}
+
+	return podName // 如果都不匹配，返回原始名称
+}
+
+// gitlab的相关接口可以根据环境变量传递容器镜像地址。prometheus并没有这个参数
+func (s *sFeishu) SendToFeishuApplication(ctx context.Context, payload map[string]interface{}, itemName string) error {
+
+	// data, err := service.Gitlab().GetUserInfoByImageUrl(ctx, imageUrl)
+	// if err != nil {
+	// 	glog.Error(ctx, err)
+	// 	return err
+	// }
+
+	// // 序列化内容
+	// contentJSON, err := json.Marshal(payload)
+	// if err != nil {
+	// 	glog.Error(ctx, "序列化富文本内容失败: %v\n", err)
+	// 	return err
+	// }
+
+	//service.Gitlab().GetUserInfoByImageUrl(ctx)
+
+	workloadName := s.extractDeploymentOrSTSName(itemName)
+
+	var deployRecord entity.DeployHistory
+	dao.DeployHistory.Ctx(ctx).
+		Where("service_name = ?", workloadName).
+		Where("type like ?", fmt.Sprintf("%%%s%%"), "cd").
+		OrderDesc("deploy_time").
+		Scan(&deployRecord)
+
+	data, err := service.Gitlab().GetUserInfoByImageUrl(ctx, deployRecord.Image)
+
+	// 构建消息体
+	req := larkcontact.NewBatchGetIdUserReqBuilder().
+		UserIdType(`open_id`).
+		Body(larkcontact.NewBatchGetIdUserReqBodyBuilder().
+			Emails([]string{data["committerEmail"]}).
+			Mobiles([]string{}).
+			IncludeResigned(true).
+			Build()).
+		Build()
+
+	// 发送消息
+	resp, err := s.client.Contact.User.BatchGetId(context.Background(), req)
+	if err != nil {
+		glog.Error(ctx, "发送消息失败: %v\n", err)
+		return err
+	}
+
+	fmt.Println("resp--------------------------------------", resp)
+
+	// 服务端错误处理
+	if !resp.Success() {
+		glog.Error(ctx, "logId: %s, error response: code=%d, msg=%s\n", resp.RequestId(), resp.Code, resp.Msg)
+		return err
+	}
+
+	glog.Info(ctx, "消息发送成功: %s\n", resp.Msg)
+	return nil
+
 }
 
 // 发送消息到飞书

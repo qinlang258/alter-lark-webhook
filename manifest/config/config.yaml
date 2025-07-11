@@ -25,3 +25,9 @@ gitlab:
   token: "iCPDzsx6pvk3QFzATYpj" 
   #  X-Gitlab-Token的值, 是gitlab触发webhook请求时, http header中的一个参数
   webhookToken: "aCmwqRKvzgqsCzd74kY4"
+  
+
+feishu:
+  appId: "cli_a8a15886b1f8d02f"
+  appSecret: "7zhyThHreFPWM4JFuMir4E5Sleprh4dd"
+  apiUrl: "https://open.larksuite.com/open-apis/"

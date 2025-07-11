@@ -8,6 +8,7 @@ require (
 	github.com/gogf/gf v1.16.9
 	github.com/gogf/gf/contrib/drivers/mysql/v2 v2.9.0
 	github.com/gogf/gf/v2 v2.9.0
+	github.com/larksuite/oapi-sdk-go/v3 v3.4.20
 	github.com/xanzy/go-gitlab v0.115.0
 )
 

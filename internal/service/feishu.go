@@ -13,6 +13,7 @@ import (
 type (
 	IFeishu interface {
 		Notify(ctx context.Context, in *model.FsMsgInput, status, itemName string) error
+		SendToFeishuApplication(ctx context.Context, payload map[string]interface{}, itemName string) error
 	}
 )
 
