@@ -254,8 +254,6 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 		return err
 	}
 
-	fmt.Println("payloadBytes: [[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]  ", payloadBytes)
-
 	// 创建 HTTP POST 请求
 	hookurl := "https://open.larksuite.com/open-apis/bot/v2/hook/" + hook
 	req, err := http.NewRequest("POST", hookurl, bytes.NewBuffer(payloadBytes))
