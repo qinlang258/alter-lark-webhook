@@ -174,14 +174,19 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 		return err
 	}
 
-	payload := tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
+	var payload map[string]interface{}
+
+	if alertname == "Watchdog" && env == "prod" {
+		payload = tools.BuildWatchDogrichTextMessage(alertname, severity, description, env, startsAt, tools.ExtractOtherLabels(templateVariable, true), status, summary)
+	}
+
+	payload = tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
 
 	// 修改调用条件，增加resolved状态判断
-	if severity == "critical" || severity == "warning" || severity == "resolved" {
+	if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" {
 		s.sendToFeishu(ctx, payload, in.Hook)
 	}
 
-	glog.Info(ctx, "开始执行异常容器的监控")
 	//新增对异常容器的
 	if alertname == "KubePodCrashLooping" {
 		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
@@ -248,6 +253,8 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 		glog.Error(ctx, "消息体转换为JSON失败: %v", err)
 		return err
 	}
+
+	fmt.Println("payloadBytes: [[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]  ", payloadBytes)
 
 	// 创建 HTTP POST 请求
 	hookurl := "https://open.larksuite.com/open-apis/bot/v2/hook/" + hook

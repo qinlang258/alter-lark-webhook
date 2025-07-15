@@ -153,6 +153,86 @@ func BuildOOMRichTextMessage(alertname, severity, description, env, startsAt, ot
 	}
 }
 
+func BuildWatchDogrichTextMessage(alertname, severity, description, env, startsAt, otherlabelsStr, status, summary string) map[string]interface{} {
+	// 初始化变量
+	var color, titlePrefix string
+	//isResolved := status == "resolved"
+
+	// 设置状态和颜色
+	status = "告警恢复"
+	color = "green"
+	titlePrefix = "✅"
+
+	// 构建消息卡片
+	return map[string]interface{}{
+		"msg_type": "interactive",
+		"card": map[string]interface{}{
+			"header": map[string]interface{}{
+				"title": map[string]interface{}{
+					"tag":     "plain_text",
+					"content": fmt.Sprintf("%s【%s】%s", titlePrefix, strings.ToUpper(severity), status),
+				},
+				"template": color,
+			},
+			"elements": []map[string]interface{}{
+				{
+					"tag": "div",
+					"fields": []map[string]interface{}{
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**告警名称**:\n%s", alertname),
+							},
+						},
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**状态**:\n<font color=\"%s\">%s</font>", color, status),
+							},
+						},
+					},
+				},
+				{
+					"tag": "div",
+					"fields": []map[string]interface{}{
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**环境**:\n%s", env),
+							},
+						},
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("​**时间**:\n%s", startsAt),
+							},
+						},
+					},
+				},
+				{
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**描述**:\n%s", description),
+				},
+				{
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**summary**:\n%s", summary),
+				},
+				{
+					"tag":     "markdown",
+					"content": fmt.Sprintf("​**其他标签**:\n```\n%s\n```", otherlabelsStr),
+				},
+				{
+					"tag": "hr",
+				},
+			},
+		},
+	}
+}
+
 func BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, otherlabelsStr, status, summary string) map[string]interface{} {
 	// 初始化变量
 	var color, titlePrefix string
