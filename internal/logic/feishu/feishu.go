@@ -126,7 +126,6 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 
 	generatorURL = tools.ExtractField(templateVariable, "generatorURL")
 	summary = tools.ExtractField(templateVariable, "summary")
-	itemName = tools.ExtractField(templateVariable, "itemName")
 
 	dbPayload := make(map[string]interface{})
 
@@ -184,12 +183,14 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" {
+		fmt.Println("告警来了：")
 		s.sendToFeishu(ctx, payload, in.Hook)
 	}
 
 	//新增对异常容器的
 	if alertname == "KubePodCrashLooping" {
 		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
+		fmt.Println("userId:  =================================", userId)
 		if err != nil {
 			return err
 		}
@@ -212,7 +213,6 @@ func (s *sFeishu) GetUserIdByCommitItem(ctx context.Context, itemName string) (*
 		Scan(&deployRecord)
 
 	data, err := service.Gitlab().GetUserInfoByImageUrl(ctx, deployRecord.Image)
-	fmt.Println(data)
 
 	// 构建消息体
 	req := larkcontact.NewBatchGetIdUserReqBuilder().
@@ -327,12 +327,9 @@ func (s *sFeishu) SendPrometheusOomAlertToFeishu(ctx context.Context, payload ma
 		return err
 	}
 
-	fmt.Println("resp--------------------------------------", resp)
-
 	// 服务端错误处理
 	if !resp.Success() {
 		glog.Error(ctx, "logId: %s, error response: code=%d, msg=%s\n", resp.RequestId(), resp.Code, resp.Msg)
-		glog.Error(ctx, resp.Msg)
 		return err
 	}
 
