@@ -167,7 +167,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	}
 
 	//记录到数据库
-	_, err = service.Prometheus().Record(ctx, dbPayload)
+	shouldResend, err := service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
 		glog.Error(ctx, "Prometheus告警记录添加失败: %v", err)
 		return err
@@ -183,14 +183,15 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" {
-		fmt.Println("告警来了：")
-		s.sendToFeishu(ctx, payload, in.Hook)
+		//判断是否需要发送告警
+		if shouldResend {
+			s.sendToFeishu(ctx, payload, in.Hook)
+		}
 	}
 
 	//新增对异常容器的
 	if alertname == "KubePodCrashLooping" {
 		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
-		fmt.Println("userId:  =================================", userId)
 		if err != nil {
 			return err
 		}

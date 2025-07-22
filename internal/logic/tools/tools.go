@@ -153,6 +153,15 @@ func BuildOOMRichTextMessage(alertname, severity, description, env, startsAt, ot
 	}
 }
 
+func ParseJSONToMap(jsonStr string) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := json.Unmarshal([]byte(jsonStr), &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func BuildWatchDogrichTextMessage(alertname, severity, description, env, startsAt, otherlabelsStr, status, summary string) map[string]interface{} {
 	// 初始化变量
 	var color, titlePrefix string
@@ -391,26 +400,25 @@ func RemoveOuterLayer(jsonStr string) (string, error) {
 
 func ExtractOtherLabels(templateVariable map[string]interface{}, forFeishu bool) string {
 	// 1. 移除 "otherlabels" 外层（如果存在）
-	if _, exists := templateVariable["otherlabels"]; exists {
-		// 提取内部字段并合并到顶层
-		if innerData, ok := templateVariable["otherlabels"].(map[string]interface{}); ok {
-			for k, v := range innerData {
-				templateVariable[k] = v // 将内部字段提升到顶层
-			}
+	if innerData, exists := templateVariable["otherlabels"].(map[string]interface{}); exists {
+		for k, v := range innerData {
+			templateVariable[k] = v // 将内部字段提升到顶层
 		}
 		delete(templateVariable, "otherlabels") // 移除外层键
 	}
 
 	// 2. 提取非保留字段
-	otherLabels := make(map[string]interface{})
 	reservedFields := map[string]bool{
 		"alertname": true, "severity": true, "description": true,
 		"env": true, "startsAt": true, "generatorURL": true,
 		"status": true, "summary": true, "endsAt": true,
 	}
 
+	// 预估算容量
+	otherLabels := make(map[string]interface{}, len(templateVariable)-len(reservedFields))
+
 	for key, val := range templateVariable {
-		if !reservedFields[key] {
+		if !reservedFields[key] && !isEmptyValue(val) {
 			otherLabels[key] = val
 		}
 	}
@@ -422,6 +430,9 @@ func ExtractOtherLabels(templateVariable map[string]interface{}, forFeishu bool)
 	// 3. 根据输出格式处理
 	if forFeishu {
 		var sb strings.Builder
+		// 预估算容量
+		sb.Grow(len(otherLabels) * 16) // 估算平均每个键值对约16字符
+
 		for k, v := range otherLabels {
 			sb.WriteString(fmt.Sprintf("%s: %v\n", k, v))
 		}
@@ -430,4 +441,21 @@ func ExtractOtherLabels(templateVariable map[string]interface{}, forFeishu bool)
 
 	jsonData, _ := json.Marshal(otherLabels)
 	return string(jsonData)
+}
+
+func isEmptyValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+
+	switch val := v.(type) {
+	case string:
+		return len(val) == 0
+	case map[string]interface{}:
+		return len(val) == 0
+	case []interface{}:
+		return len(val) == 0
+	default:
+		return false
+	}
 }
