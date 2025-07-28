@@ -93,12 +93,6 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 	labels := tools.GetMapStr(record, "labels")
 	summary := tools.GetMapStr(record, "summary")
 
-	// recordLabelMap, err := tools.ParseJSONToMap(labels)
-	// if err != nil {
-	// 	glog.Errorf(ctx, "解析labels失败: %s", err.Error())
-	// 	return false, err
-	// }
-
 	// 查询最近一条未解决的相同告警
 	oldRecord := &entity.PrometheusReport{}
 	err := dao.PrometheusReport.Ctx(ctx).
@@ -147,6 +141,7 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 
 	//当一条记录重复告警的时候，任然发告警
 	if now.Sub(gtime.NewFromStr(startTime)) > 10*time.Minute && oldRecord.IsResolved == 0 {
+		glog.Infof(ctx, "告警记录超过10分钟未解决，重新发送告警: %s", record)
 		shouldResend = true
 	}
 

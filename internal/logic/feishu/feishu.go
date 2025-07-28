@@ -177,9 +177,9 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 
 	if alertname == "Watchdog" && env == "prod" {
 		payload = tools.BuildWatchDogrichTextMessage(alertname, severity, description, env, startsAt, tools.ExtractOtherLabels(templateVariable, true), status, summary)
+	} else {
+		payload = tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
 	}
-
-	payload = tools.BuildRichTextMessage(alertname, severity, description, env, startsAt, generatorURL, tools.ExtractOtherLabels(templateVariable, true), status, summary)
 
 	// 修改调用条件，增加resolved状态判断
 	if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" {
@@ -192,6 +192,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	//新增对异常容器的
 	if alertname == "KubePodCrashLooping" {
 		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
+		glog.Info(ctx, "开始处理异常容器重启的告警: %s", userId)
 		if err != nil {
 			return err
 		}
