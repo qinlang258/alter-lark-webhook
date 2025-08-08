@@ -189,16 +189,16 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 		}
 	}
 
-	//新增对异常容器的
-	if alertname == "KubePodCrashLooping" {
-		userId, err := s.GetUserIdByCommitItem(ctx, itemName)
-		glog.Info(ctx, "开始处理异常容器重启的告警: %s", userId)
-		if err != nil {
-			return err
-		}
-		service.Feishu().SendPrometheusOomAlertToFeishu(ctx, payload, status, *userId)
+	// //TODO 等待对异常容器的针对@
+	// if alertname == "KubePodCrashLooping" {
+	// 	userId, err := s.GetUserIdByCommitItem(ctx, itemName)
+	// 	glog.Info(ctx, "开始处理异常容器重启的告警: %s", userId)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	service.Feishu().SendPrometheusOomAlertToFeishu(ctx, payload, status, *userId)
 
-	}
+	// }
 	return nil
 }
 
