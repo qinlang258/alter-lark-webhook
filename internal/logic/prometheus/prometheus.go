@@ -95,7 +95,8 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 
 	// 查询最近一条未解决的相同告警
 	oldRecord := &entity.PrometheusReport{}
-	err := dao.PrometheusReport.Ctx(ctx).
+
+	IsResolved, err := dao.PrometheusReport.Ctx(ctx).
 		Where("k8s_cluster", k8sCluster).
 		Where("alertname", alertname).
 		Where("env", env).
@@ -103,11 +104,29 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 		Where("level", level).
 		Where("is_resolved", 0).
 		Order("start_time DESC").
-		Limit(1).
-		Scan(oldRecord)
+		Count()
 
 	if err != nil {
-		glog.Errorf(ctx, "查询告警记录失败: %s", err.Error())
+		glog.Error(ctx, err.Error())
+	}
+
+	if IsResolved == 0 {
+		glog.Info(ctx, "没有找到相关的告警记录")
+	} else {
+		err = dao.PrometheusReport.Ctx(ctx).
+			Where("k8s_cluster", k8sCluster).
+			Where("alertname", alertname).
+			Where("env", env).
+			Where("item_name", itemName).
+			Where("level", level).
+			Where("is_resolved", 0).
+			Order("start_time DESC").
+			Limit(1).
+			Scan(oldRecord)
+
+		if err != nil {
+			glog.Errorf(ctx, "查询告警记录失败: %s", err.Error())
+		}
 	}
 
 	gtime.SetTimeZone("UTC-8")
@@ -118,7 +137,7 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 	// 检查是否需要重新发送告警（满足以下任一条件）：
 	// 1. 没有找到未解决的旧记录（全新告警）
 	// 2. 旧记录的start_time距离当前时间超过10分钟
-	if oldRecord.Id == 0 {
+	if IsResolved == 0 {
 		shouldResend = true
 
 		data := &entity.PrometheusReport{}
@@ -135,7 +154,7 @@ func (s *sPrometheus) Record(ctx context.Context, record g.Map) (bool, error) {
 
 		_, err := dao.PrometheusReport.Ctx(ctx).Insert(data)
 		if err != nil {
-			g.Log().Errorf(ctx, "插入新告警记录失败: %s", err.Error())
+			glog.Errorf(ctx, "插入新告警记录失败: %s", err.Error())
 		}
 	}
 

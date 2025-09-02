@@ -107,7 +107,7 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	// 提取 template_variable 字段，进行格式检查
 	data, ok := alertData["data"].(map[string]interface{})
 	if !ok {
-		return fmt.Errorf("data field missing or not in expected format")
+		glog.Error(ctx, "data field missing or not in expected format")
 	}
 
 	templateVariable, ok := data["template_variable"].(map[string]interface{})
@@ -170,7 +170,6 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	shouldResend, err := service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
 		glog.Error(ctx, "Prometheus告警记录添加失败: %v", err)
-		return err
 	}
 
 	var payload map[string]interface{}
