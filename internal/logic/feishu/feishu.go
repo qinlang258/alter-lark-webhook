@@ -181,12 +181,12 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 	}
 
 	// 修改调用条件，增加resolved状态判断
-	if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" {
-		//判断是否需要发送告警
-		if shouldResend {
-			s.sendToFeishu(ctx, payload, in.Hook)
-		}
+	// if severity == "critical" || severity == "warning" || severity == "resolved" || severity == "watchdog" || severity == "resource" {
+	//判断是否需要发送告警
+	if shouldResend {
+		s.sendToFeishu(ctx, payload, in.Hook)
 	}
+	// }
 
 	// //TODO 等待对异常容器的针对@
 	// if alertname == "KubePodCrashLooping" {
