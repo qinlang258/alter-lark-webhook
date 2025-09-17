@@ -162,6 +162,55 @@ func ParseJSONToMap(jsonStr string) (map[string]interface{}, error) {
 	return result, nil
 }
 
+// BuildOomUrlrichTextMessage 构建 OOM dump 的 Lark 富文本消息
+func BuildOomUrlrichTextMessage(serviceName, env, S3Url string) map[string]interface{} {
+	titlePrefix := "💥"
+	color := "red"
+
+	return map[string]interface{}{
+
+		"header": map[string]interface{}{
+			"template": color,
+			"elements": []map[string]interface{}{
+				{
+					"tag": "div",
+					"fields": []map[string]interface{}{
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("**服务名**:\n%s", serviceName),
+							},
+						},
+						{
+							"is_short": true,
+							"text": map[string]interface{}{
+								"tag":     "lark_md",
+								"content": fmt.Sprintf("**环境**:\n%s", env),
+							},
+						},
+					},
+				},
+				{
+					"tag":     "markdown",
+					"content": fmt.Sprintf("**S3 链接**:\n[%s](%s)", S3Url, S3Url),
+				},
+				{
+					"tag":     "markdown",
+					"content": "请尽快下载并分析 OOM dump 文件，排查内存泄漏或 GC 问题。",
+				},
+				{
+					"tag": "hr",
+				},
+			},
+			"title": map[string]interface{}{
+				"tag":     "plain_text",
+				"content": fmt.Sprintf("OOM文件推送: %s", titlePrefix),
+			},
+		},
+	}
+}
+
 func BuildWatchDogrichTextMessage(alertname, severity, description, env, startsAt, otherlabelsStr, status, summary string) map[string]interface{} {
 	// 初始化变量
 	var color, titlePrefix string

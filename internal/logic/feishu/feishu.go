@@ -6,6 +6,7 @@ import (
 	"alter-lark-webhook/internal/model"
 	"alter-lark-webhook/internal/model/entity"
 	"alter-lark-webhook/internal/service"
+	"strings"
 
 	"bytes"
 	"context"
@@ -337,4 +338,68 @@ func (s *sFeishu) SendPrometheusOomAlertToFeishu(ctx context.Context, payload ma
 	glog.Info(ctx, "消息发送成功: %s\n", resp.Msg)
 	return nil
 
+}
+
+func (s *sFeishu) OomToLark(ctx context.Context, imageUrl, s3Path string) error {
+
+	//image: 116981788283.dkr.ecr.ap-east-1.amazonaws.com/chief/user/chief-sso.git/sso-server:prod-v1.2.8-tag-94f11b66-20250915_224226
+
+	tag := strings.Split(fmt.Sprintf(imageUrl), ":")
+	env := strings.Split(fmt.Sprintf(tag[1]), "-")[0]
+
+	repositories := strings.Split(fmt.Sprintf(tag[0]), "/")
+	serviceName := repositories[1]
+	deployInfo := entity.DeployHistory{}
+
+	err := dao.DeployHistory.Ctx(ctx).
+		Where("image = ?", imageUrl).
+		OrderDesc("id").
+		Limit(1).
+		Scan(&deployInfo)
+
+	if err != nil {
+		glog.Error(ctx, err.Error())
+		return fmt.Errorf("查询部署信息失败")
+	}
+
+	payload := tools.BuildOomUrlrichTextMessage(serviceName, env, s3Path)
+
+	// 序列化内容
+	contentJSON, err := json.Marshal(payload)
+	if err != nil {
+		glog.Error(ctx, "序列化富文本内容失败: %v\n", err)
+		return err
+	}
+
+	userInfo := entity.User{}
+
+	fmt.Println("deployInfo:::::: ", deployInfo)
+
+	dao.User.Ctx(ctx).Where("name = ?", deployInfo.Operator).Scan(userInfo)
+
+	// 构建消息体
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType("open_id").
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(userInfo.OpenId).
+			MsgType("interactive").
+			Content(string(contentJSON)).
+			Build()).
+		Build()
+
+	// 发送消息
+	resp, err := s.client.Im.V1.Message.Create(ctx, req)
+	if err != nil {
+		glog.Error(ctx, "发送消息失败: %v\n", err)
+		return err
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		glog.Error(ctx, "logId: %s, error response: code=%d, msg=%s\n", resp.RequestId(), resp.Code, resp.Msg)
+		return err
+	}
+
+	glog.Info(ctx, "消息发送成功: %s\n", resp.Msg)
+	return nil
 }

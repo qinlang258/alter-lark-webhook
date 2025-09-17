@@ -21,6 +21,7 @@ var (
 				group.Bind(
 					controller.Prometheus,
 					controller.Gitlab,
+					controller.Feishu,
 				)
 			})
 			s.SetPort(8000)
