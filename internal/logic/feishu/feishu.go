@@ -348,7 +348,8 @@ func (s *sFeishu) OomToLark(ctx context.Context, imageUrl, s3Path string) error 
 	env := strings.Split(fmt.Sprintf(tag[1]), "-")[0]
 
 	repositories := strings.Split(fmt.Sprintf(tag[0]), "/")
-	serviceName := repositories[1]
+
+	serviceName := repositories[len(repositories)-1]
 	deployInfo := entity.DeployHistory{}
 
 	err := dao.DeployHistory.Ctx(ctx).
@@ -373,9 +374,7 @@ func (s *sFeishu) OomToLark(ctx context.Context, imageUrl, s3Path string) error 
 
 	userInfo := entity.User{}
 
-	fmt.Println("deployInfo:::::: ", deployInfo)
-
-	dao.User.Ctx(ctx).Where("name = ?", deployInfo.Operator).Scan(userInfo)
+	dao.User.Ctx(ctx).Where("name = ?", deployInfo.Operator).Scan(&userInfo)
 
 	// 构建消息体
 	req := larkim.NewCreateMessageReqBuilder().

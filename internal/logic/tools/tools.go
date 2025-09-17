@@ -168,44 +168,45 @@ func BuildOomUrlrichTextMessage(serviceName, env, S3Url string) map[string]inter
 	color := "red"
 
 	return map[string]interface{}{
-
-		"header": map[string]interface{}{
-			"template": color,
-			"elements": []map[string]interface{}{
-				{
-					"tag": "div",
-					"fields": []map[string]interface{}{
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("**服务名**:\n%s", serviceName),
-							},
-						},
-						{
-							"is_short": true,
-							"text": map[string]interface{}{
-								"tag":     "lark_md",
-								"content": fmt.Sprintf("**环境**:\n%s", env),
-							},
-						},
-					},
-				},
-				{
-					"tag":     "markdown",
-					"content": fmt.Sprintf("**S3 链接**:\n[%s](%s)", S3Url, S3Url),
-				},
-				{
-					"tag":     "markdown",
-					"content": "请尽快下载并分析 OOM dump 文件，排查内存泄漏或 GC 问题。",
-				},
-				{
-					"tag": "hr",
+		"elements": []interface{}{
+			map[string]interface{}{
+				"tag": "hr",
+			},
+			// 环境
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"tag":     "lark_md",
+					"content": fmt.Sprintf("🌍 **所属环境**: %s", env),
 				},
 			},
+			// 服务名
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"tag":     "lark_md",
+					"content": fmt.Sprintf("🛠 **服务名**: %s", serviceName),
+				},
+			},
+			// GitLab 链接
+			map[string]interface{}{
+				"tag": "div",
+				"text": map[string]interface{}{
+					"tag":     "lark_md",
+					"content": fmt.Sprintf("🔗 **S3下载地址 地址**: %s", S3Url),
+				},
+			},
+
+			// 分隔线
+			map[string]interface{}{
+				"tag": "hr",
+			},
+		},
+		"header": map[string]interface{}{
+			"template": color,
 			"title": map[string]interface{}{
 				"tag":     "plain_text",
-				"content": fmt.Sprintf("OOM文件推送: %s", titlePrefix),
+				"content": fmt.Sprintf(" %s %s服务 OOM下载通知: ", titlePrefix, serviceName),
 			},
 		},
 	}
