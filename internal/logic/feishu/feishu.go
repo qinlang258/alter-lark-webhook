@@ -167,6 +167,8 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 		}
 	}
 
+	fmt.Println("dbPayload::::::::: ", dbPayload)
+
 	//记录到数据库
 	shouldResend, err := service.Prometheus().Record(ctx, dbPayload)
 	if err != nil {
