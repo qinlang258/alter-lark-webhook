@@ -24,6 +24,13 @@ var (
 					controller.Feishu,
 				)
 			})
+
+			s.Group("/", func(group *ghttp.RouterGroup) {
+				group.Middleware()
+				// 处理 WebSocket 连接
+				group.Bind(controller.Skywalking) // 你为路由绑定具体的控制器方法
+			})
+
 			s.SetPort(8000)
 			s.Run()
 			return nil

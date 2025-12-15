@@ -149,6 +149,8 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 			"description": description,
 			"generator":   generatorURL,
 			"is_resolved": "1",
+			"groupName":   "test",
+			"warningId":   455,
 		}
 	} else {
 		dbPayload = map[string]interface{}{
@@ -164,10 +166,10 @@ func (s *sFeishu) Notify(ctx context.Context, in *model.FsMsgInput, status, item
 			"description": description,
 			"generator":   generatorURL,
 			"is_resolved": "0",
+			"groupName":   "test",
+			"warningId":   455,
 		}
 	}
-
-	fmt.Println("dbPayload::::::::: ", dbPayload)
 
 	//记录到数据库
 	shouldResend, err := service.Prometheus().Record(ctx, dbPayload)
@@ -259,7 +261,9 @@ func (s *sFeishu) sendToFeishu(ctx context.Context, payload map[string]interface
 	}
 
 	// 创建 HTTP POST 请求
-	hookurl := "https://open.larksuite.com/open-apis/bot/v2/hook/" + hook
+	//hookurl := "https://open.larksuite.com/open-apis/bot/v2/hook/" + hook
+
+	hookurl := "https://api.test.stx365.com/cmdb-java/send/send-alert-card"
 	req, err := http.NewRequest("POST", hookurl, bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		glog.Error(ctx, "创建请求失败: %v", err)

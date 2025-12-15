@@ -1,5 +1,5 @@
 server:
-  address:     ":8000"
+  address:     "0.0.0.0:8000"
   openapiPath: "/api.json"
   swaggerPath: "/swagger"
 
@@ -19,7 +19,7 @@ database:
 
 # git相关配置
 gitlab:
-  url: "https://dev.stx365.com"
+  url: "https://gitlab.dev.stx365.com"
   # cmdb调用gitlab的api时需要的token
   #token: "ZJpHBWyaPMh1hufrjpYv" # 对应admin的 api token
   token: "iCPDzsx6pvk3QFzATYpj" 

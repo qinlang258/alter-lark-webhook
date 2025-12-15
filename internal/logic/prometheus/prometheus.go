@@ -11,7 +11,6 @@ import (
 	"github.com/gogf/gf/v2/os/gtime"
 
 	"context"
-	"fmt"
 
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/frame/g"
@@ -58,7 +57,7 @@ func (s *sPrometheus) GetRawAlertInfo(ctx context.Context) (alerts []*gjson.Json
 
 // 单独处理已解决告警
 func (s *sPrometheus) handleResolvedAlert(ctx context.Context, record g.Map, oldRecord *entity.PrometheusReport) (bool, error) {
-	fmt.Println("oldRecord: ", oldRecord)
+	//fmt.Println("oldRecord: ", oldRecord)
 	endTime := tools.GetMapStr(record, "end_time")
 	var utc8EndTime *gtime.Time
 	if endTime == "N/A" {

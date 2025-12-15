@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"alter-lark-webhook/api"
 	"alter-lark-webhook/internal/model"
@@ -27,6 +28,7 @@ func (c *cPrometheus) PrometheusFS(ctx context.Context, req *api.PrometheusFSReq
 		glog.Fatal(ctx, "时区设置失败:", err)
 	}
 	for _, alert := range alters {
+		fmt.Println("alert::::::::::::::: ", alert)
 		status := alert.Get("status").String()
 		env := alert.Get("labels.env").String()
 		alertname := alert.Get("labels.alertname").String()
